@@ -39,7 +39,7 @@ compiled. Bug reports with the exact error text are the most useful feedback rig
 traces to `%LOCALAPPDATA%\HamLink\error.log`.
 
 ## Download (Windows)
-Get `HamLink-<version>-win-x64.zip` from the [latest release](https://github.com/MRC757/hamlink/releases/latest), unzip
+Get `HamLink-<version>-win-x64.zip` from the newest release on the [Releases page](https://github.com/MRC757/hamlink/releases), unzip
 it anywhere and run `HamLink.exe`. Nothing to install: .NET is included, and it runs on an air-gapped PC. The program is
 not code-signed, so Windows SmartScreen may warn the first time: choose *More info > Run anyway*.
 
