@@ -1,0 +1,11 @@
+# Host test suite: python3 -m pip install -r tests/requirements.txt   (also needs cmake and gcc)
+pytest
+numpy
+scipy
+maidenhead   # cross-check only; the Maidenhead tests use exact arithmetic as the main oracle
+mgrs
+pyproj
+# optional, for tools/syntax_check.py (Kotlin and C# syntax check, no compiler)
+tree-sitter
+tree-sitter-kotlin
+tree-sitter-c-sharp

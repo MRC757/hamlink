@@ -1,0 +1,10 @@
+build-host/
+android/.gradle/
+android/app/build/
+android/local.properties
+__pycache__/
+.pytest_cache/
+windows/bin/
+windows/obj/
+windows/publish/
+build-win/

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "version": 1,
+  "name": "POS",
+  "title": "Position report",
+  "map": {
+    "role": "station",
+    "locField": "loc",
+    "timeField": "time",
+    "style": {"color": "#1E88E5", "shape": "rectangle"},
+    "staleMin": 30,
+    "expireMin": 1440,
+    "label": "{loc}"
+  },
+  "fields": [
+    {"key": "loc", "label": "Location", "kind": "latlon"},
+    {"key": "time", "label": "Time (UTC)", "kind": "time"},
+    {"key": "source", "label": "Position source", "kind": "enum", "values": [
+      {"code": 0, "name": "GPS", "radius_m": 0},
+      {"code": 1, "name": "Typed coordinates", "radius_m": 0},
+      {"code": 2, "name": "Grid square (8 char)", "radius_m": 550},
+      {"code": 3, "name": "Grid square (6 char)", "radius_m": 3500},
+      {"code": 4, "name": "Grid square (4 char)", "radius_m": 100000}
+    ]},
+    {"key": "speed", "label": "Speed (km/h)", "kind": "uint", "bits": 8, "optional": true},
+    {"key": "course", "label": "Course (degrees)", "kind": "uint", "bits": 9, "max": 359, "optional": true}
+  ]
+}

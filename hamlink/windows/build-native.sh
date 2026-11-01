@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Rebuild windows/native/hamlink_core.dll (x64) from core/ + third_party/ on Linux/macOS.
+# Uses zig as the cross compiler (pip install ziglang) or mingw-w64 if you have it installed.
+# The COFDMTV modem is C++17, so the link step uses the C++ driver (libc++ is linked statically).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="${1:-$ROOT/windows/native/hamlink_core.dll}"
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+INC=(-I"$ROOT/core" -I"$ROOT/third_party/codec2/src" -I"$ROOT/third_party/codec2/src/codec2" -I"$ROOT/third_party/aicodix")
+CSRC=("$ROOT"/core/{hamlink_api,voice,hdlc,afsk,mesh,tone,tnc,geo,nmea,report,mapmodel,schemas_gen}.c "$ROOT"/third_party/codec2/src/*.c)
+
+if command -v x86_64-w64-mingw32-gcc >/dev/null; then
+  CC=(x86_64-w64-mingw32-gcc); CXX=(x86_64-w64-mingw32-g++); LD=(x86_64-w64-mingw32-g++ -static-libgcc -static-libstdc++)
+else
+  CC=(python3 -m ziglang cc -target x86_64-windows-gnu); CXX=(python3 -m ziglang c++ -target x86_64-windows-gnu); LD=("${CXX[@]}")
+fi
+
+i=0; OBJS=()
+for f in "${CSRC[@]}"; do
+  o="$TMP/$((i++)).o"
+  "${CC[@]}" -c -O2 -w -DCODEC2_VERSION_STR='"1.2.0"' "${INC[@]}" "$f" -o "$o"; OBJS+=("$o")
+done
+"${CXX[@]}" -c -std=c++17 -O2 -w "${INC[@]}" "$ROOT/core/ofdm.cpp" -o "$TMP/ofdm.o"; OBJS+=("$TMP/ofdm.o")
+"${LD[@]}" -shared "${OBJS[@]}" -o "$OUT"
+rm -f "${OUT%.dll}.pdb" "$(dirname "$OUT")"/*.lib
+echo "built $OUT"

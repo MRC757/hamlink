@@ -1,0 +1,51 @@
+{
+  "schema": 2,
+  "version": 1,
+  "name": "SALUTE",
+  "title": "SALUTE report",
+  "map": {
+    "role": "contact",
+    "locField": "loc",
+    "timeField": "observed",
+    "colorField": "assess",
+    "tintStation": true,
+    "staleMin": 30,
+    "expireMin": 240,
+    "label": "{assess}: {size_n} {size_what}, {activity}"
+  },
+  "fields": [
+    {"key": "assess", "label": "Assessment", "kind": "enum", "values": [
+      {"code": 0, "name": "Unknown", "color": "#FDD835", "shape": "quatrefoil", "severity": 2},
+      {"code": 1, "name": "Suspect", "color": "#FB8C00", "shape": "diamond", "severity": 3},
+      {"code": 2, "name": "Hostile", "color": "#E53935", "shape": "diamond", "severity": 4},
+      {"code": 3, "name": "Neutral", "color": "#43A047", "shape": "square", "severity": 1},
+      {"code": 4, "name": "Friendly", "color": "#1E88E5", "shape": "rectangle", "severity": 0}
+    ]},
+    {"key": "size_n", "label": "Size: how many", "kind": "uint", "bits": 10},
+    {"key": "size_what", "label": "Size: of what", "kind": "enum", "values": [
+      {"code": 0, "name": "personnel"}, {"code": 1, "name": "vehicles"}, {"code": 2, "name": "aircraft"},
+      {"code": 3, "name": "vessels"}, {"code": 4, "name": "other"}
+    ]},
+    {"key": "activity", "label": "Activity", "kind": "enum", "values": [
+      {"code": 0, "name": "observing"}, {"code": 1, "name": "moving"}, {"code": 2, "name": "stationary"},
+      {"code": 3, "name": "attacking"}, {"code": 4, "name": "defending"}, {"code": 5, "name": "digging in"},
+      {"code": 6, "name": "withdrawing"}, {"code": 7, "name": "patrolling"}, {"code": 8, "name": "assembling"},
+      {"code": 9, "name": "other"}
+    ]},
+    {"key": "activity_note", "label": "Activity detail", "kind": "text", "max": 24, "optional": true},
+    {"key": "loc", "label": "Location", "kind": "latlon"},
+    {"key": "heading", "label": "Moving toward", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "N"}, {"code": 1, "name": "NE"}, {"code": 2, "name": "E"}, {"code": 3, "name": "SE"},
+      {"code": 4, "name": "S"}, {"code": 5, "name": "SW"}, {"code": 6, "name": "W"}, {"code": 7, "name": "NW"}
+    ]},
+    {"key": "unit", "label": "Unit / uniform / markings", "kind": "text", "max": 24, "optional": true},
+    {"key": "observed", "label": "Time observed (UTC)", "kind": "time"},
+    {"key": "equip", "label": "Equipment", "kind": "flags", "values": [
+      {"code": 0, "name": "small arms"}, {"code": 1, "name": "crew-served weapons"}, {"code": 2, "name": "light vehicles"},
+      {"code": 3, "name": "armored vehicles"}, {"code": 4, "name": "aircraft"}, {"code": 5, "name": "UAS/drone"},
+      {"code": 6, "name": "vessels"}, {"code": 7, "name": "comms gear"}, {"code": 8, "name": "explosives/IED"},
+      {"code": 9, "name": "other"}
+    ]},
+    {"key": "equip_note", "label": "Equipment detail", "kind": "text", "max": 24, "optional": true}
+  ]
+}

@@ -1,0 +1,4 @@
+# Large test media: keep on disk, out of git (GitHub rejects files over 100 MB)
+*.iso
+*.flac
+*.wav

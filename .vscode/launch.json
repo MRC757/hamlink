@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "HamLink (Windows app)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "HamLink: build (Debug)",
+            "program": "${workspaceFolder}/hamlink/windows/bin/Debug/net8.0-windows10.0.19041.0/win-x64/HamLink.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/hamlink/windows/bin/Debug/net8.0-windows10.0.19041.0/win-x64",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}

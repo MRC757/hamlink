@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- The 10.0.19041 suffix adds the Windows Runtime projection used for the Windows location service. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>HamLink</AssemblyName>
+    <RootNamespace>HamLink</RootNamespace>
+    <Version>0.1.2</Version>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Self-contained: the target PC (even air-gapped) needs no .NET install. -->
+    <SelfContained>true</SelfContained>
+    <!-- Publish as a folder, not a single file: nothing is extracted to %TEMP% at run time. -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- App.xaml lives under src\, not the project root, so the SDK's implicit glob treats it as a
+       plain Page instead of the application entry point. Fix that explicitly, or dotnet build fails
+       with CS5001 (no Main method). -->
+  <ItemGroup>
+    <Page Remove="src\App.xaml" />
+    <ApplicationDefinition Include="src\App.xaml" />
+  </ItemGroup>
+
+  <!-- Prebuilt native core (modem, ARQ, relay, Codec2). Rebuild with build-native.sh if you change core/.
+       Named hamlink_core.dll, not hamlink.dll: the managed assembly below is also named "HamLink", and
+       Windows filenames are case-insensitive, so "hamlink.dll" and "HamLink.dll" would be the same file
+       on disk and one build output would silently clobber the other. -->
+  <ItemGroup>
+    <None Include="native\hamlink_core.dll" Link="hamlink_core.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

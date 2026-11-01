@@ -1,0 +1,52 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "HamLink: build (Debug)",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/hamlink/windows/HamLink.csproj",
+                "-c",
+                "Debug",
+                "-r",
+                "win-x64"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "HamLink: publish (Release, self-contained)",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "publish",
+                "${workspaceFolder}/hamlink/windows/HamLink.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-x64",
+                "--self-contained",
+                "true",
+                "-o",
+                "${workspaceFolder}/hamlink/windows/publish"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "HamLink: rebuild native DLL (requires WSL/zig or mingw-w64)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "${workspaceFolder}/hamlink/windows/build-native.sh"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}
