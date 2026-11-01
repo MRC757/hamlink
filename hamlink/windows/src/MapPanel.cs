@@ -34,7 +34,11 @@ internal sealed class MapPanel : Grid
         map.ItemSelected += OnSelect;
         map.MapRightClicked += (lat, lon) =>
         {
-            if (!engine.IsRunning) return;
+            if (!engine.IsRunning)
+            {
+                MessageBox.Show(Window.GetWindow(this), "Press Start first: reports can only be sent while the radio is running.", "HamLink");
+                return;
+            }
             new ReportWindow(engine, new Fix(lat, lon, 0, "Map")) { Owner = Window.GetWindow(this) }.ShowDialog();
         };
 
@@ -96,8 +100,10 @@ internal sealed class MapPanel : Grid
         map.SetMe(fix);
         posText.Text = Positions.Status;
         posText.Foreground = fix == null ? Brushes.DarkOrange : Brushes.SteelBlue;
-        sendPos.IsEnabled = engine.IsRunning && fix != null;
-        newReport.IsEnabled = engine.IsRunning;
+        const string startFirst = "Press Start first: the radio is not running.";
+        Ui.Enable(sendPos, engine.IsRunning && fix != null,
+            !engine.IsRunning ? startFirst : "Set your position first: Map setup... > Where am I?");
+        Ui.Enable(newReport, engine.IsRunning, startFirst);
         if (fix != null && !map.CamPlaced) map.CenterOn(fix.Lat, fix.Lon, 12);
     }
 

@@ -91,7 +91,7 @@ public partial class MainWindow : Window
             ManualPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             ManualText.Text = stage.Length > 0 ? stage : $"Manual PTT: {pending} frame(s) waiting. Press Transmit, then key the radio when told.";
             ManualText.Foreground = stage.Length > 0 ? System.Windows.Media.Brushes.Firebrick : System.Windows.Media.Brushes.Black;
-            ManualGoBtn.IsEnabled = stage.Length == 0;
+            Ui.Enable(ManualGoBtn, stage.Length == 0, "A transmission is already in progress. Press Cancel to stop it.");
             ManualGoBtn.Content = $"Transmit ({settings.ManualCountdown} s countdown)";
         });
         engine.Info += (route, ptt) => Dispatcher.BeginInvoke(() => { RouteText.Text = route; PttText.Text = ptt; });
@@ -142,10 +142,12 @@ public partial class MainWindow : Window
     void SetRunning(bool on)
     {
         StartBtn.Content = on ? "Stop" : "Start";
-        SendBtn.IsEnabled = on;
-        TalkBtn.IsEnabled = on;
-        TestBtn.IsEnabled = on;
-        SettingsBtn.IsEnabled = !on; // settings take effect at Start; avoid half-applied changes
+        const string startFirst = "Press Start first: the radio is not running.";
+        Ui.Enable(SendBtn, on, startFirst);
+        Ui.Enable(TalkBtn, on, startFirst);
+        Ui.Enable(TestBtn, on, startFirst);
+        // settings take effect at Start; avoid half-applied changes
+        Ui.Enable(SettingsBtn, !on, "Press Stop to change settings. They take effect at the next Start.");
         RelayBox.IsEnabled = true;
         mapPanel?.Refresh();
         if (!on) { PhaseText.Text = "OFF"; PhaseBadge.Background = Brushes.Gray; LevelBar.Value = 0; }
