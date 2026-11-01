@@ -10,7 +10,8 @@ schemas/*.json  --(tools/gen_schemas.py)-->  core/schemas_gen.[ch]  -->  core/re
 ```
 
 ## Add a new report type (e.g. a 9-line MEDEVAC or a damage report)
-1. Copy `schemas/salute.json` to `schemas/<name>.json`. Pick an unused `schema` id (1-255; 1 = POS, 2 = SALUTE) and a `name`.
+1. Copy `schemas/salute.json` to `schemas/<name>.json`. Pick an unused `schema` id (1-255; 1 = POS, 2 = SALUTE,
+   3 = SITREP) and a `name`.
 2. Describe `fields`. Kinds: `enum` (choices with `code`, `name`, optional `color`, `shape`, `severity`, `radius_m`),
    `uint` (`bits` 1-16, optional `max`), `text` (`max` 1-63, 6-bit charset), `latlon`, `time` (24-bit minutes), `flags`
    (up to 32 named bits). Add `"optional": true` for fields that may be left out (costs 1 bit).
@@ -20,7 +21,8 @@ schemas/*.json  --(tools/gen_schemas.py)-->  core/schemas_gen.[ch]  -->  core/re
 4. Run `python3 tools/gen_schemas.py`. It validates everything (unique ids and keys, colours, field references, worst-case
    size must fit one frame) and refuses with a message otherwise. Commit the regenerated `core/schemas_gen.[ch]`.
 5. Rebuild: the Android build compiles `core/`; for Windows run `windows/build-native.sh` to refresh `hamlink_core.dll`.
-6. That is all for the UIs: any schema with `map.role: "contact"` gets a form in the **New report** dialog automatically
+6. That is all for the UIs: any schema whose `map.role` is `contact` or `none` (not drawn on the map, like SITREP) gets a
+   form in the **New report** dialog automatically
    (choices become chips/drop-downs, flags become check boxes, `latlon` accepts any format, `time` becomes "how long ago").
 7. Add a test next to `tests/report_test.c` (round trip, size) and a case in `tests/test_reports_e2e.py`.
 

@@ -298,10 +298,14 @@ void afsk_demod_process(afsk_demod_t *d, const int16_t *in, size_t n) {
     for (size_t i = 0; i < n; i++) {
         float x = (float)in[i] * (1.0f / 32768.0f);
         float y = x - d->xprev + 0.995f * d->yprev; /* DC blocker */
+        /* After a signal, exact digital silence makes y decay into denormals and stick there (0.995 * the smallest
+         * denormal rounds back to itself); the prefilter then runs about 100x slower, slower than real time. */
+        if (fabsf(y) < 1e-20f) y = 0.0f;
         d->xprev = x;
         d->yprev = y;
 
         d->lvl += (y * y - d->lvl) * (1.0f / 480.0f); /* broadband level: carrier sense must still hear voice */
+        if (d->lvl < 1e-30f) d->lvl = 0.0f;
 
         d->pfbuf[d->pfpos] = y;
         d->pfbuf[d->pfpos + PF_TAPS] = y;

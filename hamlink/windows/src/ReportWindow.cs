@@ -24,8 +24,8 @@ internal static class Schemas
     /// <summary>All report types the core knows (stateless native calls: safe from the UI thread).</summary>
     public static IReadOnlyList<SchemaSpec> All => all ??= Load();
 
-    /// <summary>Types that appear on the map as situation reports (the position report has its own button).</summary>
-    public static IEnumerable<SchemaSpec> Forms => All.Where(s => s.Role == "contact");
+    /// <summary>Types offered in the New report dialog: all but station positions, which have their own button.</summary>
+    public static IEnumerable<SchemaSpec> Forms => All.Where(s => s.Role != "station");
 
     static List<SchemaSpec> Load()
     {

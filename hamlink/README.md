@@ -28,6 +28,8 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   map tiles are cached on the device. Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
   On Windows, right-click a point on the map to start a report at that location.
+* **Station SITREP**: a nine-field drop-down status report about your own station and area (conditions, state, home/
+  mobile/portable, power, water, sanitation, medical, grid communications, transportation), about 5 bytes on the air.
   See `docs/MAPS_AND_REPORTS.md` and `docs/EXTENDING.md`.
 * Amateur radio only: callsign required, no encryption, publicly documented protocol.
 
@@ -87,6 +89,8 @@ python3 sweep.py                        # modem frame-success vs SNR table
 python3 tools/gen_schemas.py --check    # from the repo root: generated report tables up to date
 python3 tools/syntax_check.py           # Kotlin and C# syntax (no compiler)
 ```
+On Windows, `py tools/score_tnc_cd.py TRACK.flac` scores the receiver in the shipped `hamlink_core.dll` on any WAV/FLAC
+recording (needs numpy, scipy and soundfile; no compiler). Results on the WA8LMF TNC Test CD: `docs/DSP_IMPROVEMENTS.md`.
 
 ## Build the apps
 **Windows:** see `windows/README.md` (`windows/build.ps1`, or `dotnet publish`; builds with the .NET 8 or 9 SDK).

@@ -27,6 +27,8 @@ start a report there.
 * **Voice as store-and-forward clips** (Codec2 700C): a 5 s clip is about 500 bytes.
 * **Reports on a map:** position and SALUTE reports, coloured by the reporter's assessment, fading with age. Report types
   are JSON files (`hamlink/schemas/`), so adding one needs no code.
+* **Station SITREP:** a nine-field drop-down status report (conditions, state, home/mobile/portable, then power, water,
+  sanitation, medical, grid communications and transportation, which may be omitted when all is OK).
 * **Receiver tested on real packet audio:** on the WA8LMF TNC Test CD it decodes 971 error-free frames from the
   de-emphasised traffic track and 1001 from the flat one, with no false frames from an hour of noise.
 
@@ -36,7 +38,12 @@ one PC. **Not yet tested:** two stations exchanging messages, any real radio, an
 compiled. Bug reports with the exact error text are the most useful feedback right now. Windows logs errors with stack
 traces to `%LOCALAPPDATA%\HamLink\error.log`.
 
-## Build and run (Windows)
+## Download (Windows)
+Get `HamLink-<version>-win-x64.zip` from the [latest release](https://github.com/MRC757/hamlink/releases/latest), unzip
+it anywhere and run `HamLink.exe`. Nothing to install: .NET is included, and it runs on an air-gapped PC. The program is
+not code-signed, so Windows SmartScreen may warn the first time: choose *More info > Run anyway*.
+
+## Build and run from source (Windows)
 Needs the .NET 8 or 9 SDK and internet access once, for NuGet.
 
 ```powershell

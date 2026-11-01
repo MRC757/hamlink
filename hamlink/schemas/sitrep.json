@@ -1,0 +1,57 @@
+{
+  "schema": 3,
+  "version": 1,
+  "name": "SITREP",
+  "title": "Station SITREP",
+  "map": {
+    "role": "none",
+    "label": "{cond} / {state} / {pos}"
+  },
+  "fields": [
+    {"key": "cond", "label": "1. Conditions at operator's location", "kind": "enum", "values": [
+      {"code": 0, "name": "A: all stable"},
+      {"code": 1, "name": "B: moderate disruptions"},
+      {"code": 2, "name": "C: severe disruptions"}
+    ]},
+    {"key": "state", "label": "2. Operator's location by state", "kind": "enum", "values": [
+      {"code": 0, "name": "AK"}, {"code": 1, "name": "AL"}, {"code": 2, "name": "AR"}, {"code": 3, "name": "AS"},
+      {"code": 4, "name": "AZ"}, {"code": 5, "name": "CA"}, {"code": 6, "name": "CO"}, {"code": 7, "name": "CT"},
+      {"code": 8, "name": "DC"}, {"code": 9, "name": "DE"}, {"code": 10, "name": "FL"}, {"code": 11, "name": "GA"},
+      {"code": 12, "name": "GU"}, {"code": 13, "name": "HI"}, {"code": 14, "name": "IA"}, {"code": 15, "name": "ID"},
+      {"code": 16, "name": "IL"}, {"code": 17, "name": "IN"}, {"code": 18, "name": "KS"}, {"code": 19, "name": "KY"},
+      {"code": 20, "name": "LA"}, {"code": 21, "name": "MA"}, {"code": 22, "name": "MD"}, {"code": 23, "name": "ME"},
+      {"code": 24, "name": "MI"}, {"code": 25, "name": "MN"}, {"code": 26, "name": "MO"}, {"code": 27, "name": "MP"},
+      {"code": 28, "name": "MS"}, {"code": 29, "name": "MT"}, {"code": 30, "name": "NC"}, {"code": 31, "name": "ND"},
+      {"code": 32, "name": "NE"}, {"code": 33, "name": "NH"}, {"code": 34, "name": "NJ"}, {"code": 35, "name": "NM"},
+      {"code": 36, "name": "NV"}, {"code": 37, "name": "NY"}, {"code": 38, "name": "OH"}, {"code": 39, "name": "OK"},
+      {"code": 40, "name": "OR"}, {"code": 41, "name": "PA"}, {"code": 42, "name": "PR"}, {"code": 43, "name": "RI"},
+      {"code": 44, "name": "SC"}, {"code": 45, "name": "SD"}, {"code": 46, "name": "TN"}, {"code": 47, "name": "TX"},
+      {"code": 48, "name": "UT"}, {"code": 49, "name": "VA"}, {"code": 50, "name": "VI"}, {"code": 51, "name": "VT"},
+      {"code": 52, "name": "WA"}, {"code": 53, "name": "WI"}, {"code": 54, "name": "WV"}, {"code": 55, "name": "WY"},
+      {"code": 56, "name": "Other (outside US)"}
+    ]},
+    {"key": "pos", "label": "3. Operator's position", "kind": "enum", "values": [
+      {"code": 0, "name": "H: home"},
+      {"code": 1, "name": "M: mobile"},
+      {"code": 2, "name": "P: portable"}
+    ]},
+    {"key": "power", "label": "4. Commercial power", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "I: intermittent"}, {"code": 2, "name": "N: no"}
+    ]},
+    {"key": "water", "label": "5. Water", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "C: contaminated"}, {"code": 2, "name": "N: no"}
+    ]},
+    {"key": "sanitation", "label": "6. Sanitation", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "N: no"}
+    ]},
+    {"key": "medical", "label": "7. Medical", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "N: no"}
+    ]},
+    {"key": "comms", "label": "8. Grid communications", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "N: no"}
+    ]},
+    {"key": "transport", "label": "9. Transportation", "kind": "enum", "optional": true, "values": [
+      {"code": 0, "name": "Y: yes"}, {"code": 1, "name": "N: no"}
+    ]}
+  ]
+}

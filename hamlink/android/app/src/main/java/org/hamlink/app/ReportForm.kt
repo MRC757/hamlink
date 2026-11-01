@@ -49,8 +49,8 @@ object Schemas {
         (0 until Native.schemaCount()).mapNotNull { i -> Native.schemaJson(i)?.let { parse(JSONObject(it)) } }
     }
 
-    /** Types that appear on the map as situation reports (the position report has its own button). */
-    val forms: List<SchemaSpec> get() = all.filter { it.role == "contact" }
+    /** Types offered in the New report dialog: all but station positions, which have their own button. */
+    val forms: List<SchemaSpec> get() = all.filter { it.role != "station" }
 
     private fun parse(o: JSONObject): SchemaSpec {
         val fields = ArrayList<FieldSpec>()

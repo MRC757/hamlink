@@ -90,7 +90,8 @@ Cost: about 8 x frame-length CRC checks per bad frame, negligible on a phone.
 It can be switched off in Settings. Double-bit repair was not added (Dire Wolf's caution, above).
 
 ### 4. Multiple slicers / parallel demodulators, with a band-pass prefilter — **implemented 2026-11-01**
-Measured on the WA8LMF TNC Test CD (ISO "TNC_Test_2", tracks resampled 44.1 to 48 kHz, left channel, error-free frames,
+Measured with `tools/score_tnc_cd.py` (Windows, scores the shipped `hamlink_core.dll`, no compiler needed; any DLL can
+be passed with `--dll`) on the WA8LMF TNC Test CD (ISO "TNC_Test_2", tracks resampled 44.1 to 48 kHz, left channel, error-free frames,
 bit repair off). The ISO's track names do not match their contents: tracks 1 and 2 are the same 25.8-minute traffic
 recording, flat and de-emphasised; track 3 holds the 100 Mic-E bursts.
 
@@ -109,8 +110,12 @@ What was learned:
   de-emphasised audio slices best near +2 dB and flat audio near -1 dB, hence those two slicers.
 * **No false decodes:** 0 frames from 60 minutes of white noise (-40, -20, -6 dBFS) and from the CD's three
   calibration-tone tracks, with and without bit repair.
-* CPU: about 140x real time on one x86 core including Python call overhead (under 1% of a core). The FIR is the main
-  cost; measure on a phone before relying on it there, and consider an IIR band-pass if it is too slow.
+* CPU: about 80-170x real time on one x86 core including Python call overhead (about 1% of a core), against about
+  1,200x before; the FIR is the main cost. Measure on a phone before relying on it there, and consider an IIR band-pass
+  if it is too slow.
+* **Denormals:** the first version ran slower than real time (1.8 s of CPU per second of audio) during exact digital
+  silence after a signal, because the DC blocker's output decayed into denormal floats and stayed there. The blocker
+  output and the level meter are now flushed to zero below 1e-20; such silence processes like any other audio.
 * Not re-run after the change: the Linux pytest suite (`tests/`), including `test_dsp.py`.
 Dire Wolf runs 9 slicers with different mark/space weightings (about 2.3 dB apart, -6 to +12 dB) and keeps any that
 decode. On Track 2 that took it from 988 to 1004 frames (and 1022 with bit repair). The best single weighting differed

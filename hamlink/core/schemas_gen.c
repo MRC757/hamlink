@@ -86,8 +86,119 @@ static const char J_SALUTE[] = "{\"schema\":2,\"version\":1,\"name\":\"SALUTE\",
 /* SALUTE report: worst case 72 bytes on the air */
 static const rschema_t S_SALUTE = {2, 1, RR_CONTACT, 11, 1, 5, 8, 0, 30, 240, "SALUTE", "SALUTE report", "{assess}: {size_n} {size_what}, {activity}", NULL, NULL, J_SALUTE, F_SALUTE};
 
+static const rvalue_t V_SITREP_cond[] = {
+    {0, "A: all stable", NULL, NULL, 0, 0},
+    {1, "B: moderate disruptions", NULL, NULL, 0, 1},
+    {2, "C: severe disruptions", NULL, NULL, 0, 2},
+};
+static const rvalue_t V_SITREP_state[] = {
+    {0, "AK", NULL, NULL, 0, 0},
+    {1, "AL", NULL, NULL, 0, 1},
+    {2, "AR", NULL, NULL, 0, 2},
+    {3, "AS", NULL, NULL, 0, 3},
+    {4, "AZ", NULL, NULL, 0, 4},
+    {5, "CA", NULL, NULL, 0, 5},
+    {6, "CO", NULL, NULL, 0, 6},
+    {7, "CT", NULL, NULL, 0, 7},
+    {8, "DC", NULL, NULL, 0, 8},
+    {9, "DE", NULL, NULL, 0, 9},
+    {10, "FL", NULL, NULL, 0, 10},
+    {11, "GA", NULL, NULL, 0, 11},
+    {12, "GU", NULL, NULL, 0, 12},
+    {13, "HI", NULL, NULL, 0, 13},
+    {14, "IA", NULL, NULL, 0, 14},
+    {15, "ID", NULL, NULL, 0, 15},
+    {16, "IL", NULL, NULL, 0, 16},
+    {17, "IN", NULL, NULL, 0, 17},
+    {18, "KS", NULL, NULL, 0, 18},
+    {19, "KY", NULL, NULL, 0, 19},
+    {20, "LA", NULL, NULL, 0, 20},
+    {21, "MA", NULL, NULL, 0, 21},
+    {22, "MD", NULL, NULL, 0, 22},
+    {23, "ME", NULL, NULL, 0, 23},
+    {24, "MI", NULL, NULL, 0, 24},
+    {25, "MN", NULL, NULL, 0, 25},
+    {26, "MO", NULL, NULL, 0, 26},
+    {27, "MP", NULL, NULL, 0, 27},
+    {28, "MS", NULL, NULL, 0, 28},
+    {29, "MT", NULL, NULL, 0, 29},
+    {30, "NC", NULL, NULL, 0, 30},
+    {31, "ND", NULL, NULL, 0, 31},
+    {32, "NE", NULL, NULL, 0, 32},
+    {33, "NH", NULL, NULL, 0, 33},
+    {34, "NJ", NULL, NULL, 0, 34},
+    {35, "NM", NULL, NULL, 0, 35},
+    {36, "NV", NULL, NULL, 0, 36},
+    {37, "NY", NULL, NULL, 0, 37},
+    {38, "OH", NULL, NULL, 0, 38},
+    {39, "OK", NULL, NULL, 0, 39},
+    {40, "OR", NULL, NULL, 0, 40},
+    {41, "PA", NULL, NULL, 0, 41},
+    {42, "PR", NULL, NULL, 0, 42},
+    {43, "RI", NULL, NULL, 0, 43},
+    {44, "SC", NULL, NULL, 0, 44},
+    {45, "SD", NULL, NULL, 0, 45},
+    {46, "TN", NULL, NULL, 0, 46},
+    {47, "TX", NULL, NULL, 0, 47},
+    {48, "UT", NULL, NULL, 0, 48},
+    {49, "VA", NULL, NULL, 0, 49},
+    {50, "VI", NULL, NULL, 0, 50},
+    {51, "VT", NULL, NULL, 0, 51},
+    {52, "WA", NULL, NULL, 0, 52},
+    {53, "WI", NULL, NULL, 0, 53},
+    {54, "WV", NULL, NULL, 0, 54},
+    {55, "WY", NULL, NULL, 0, 55},
+    {56, "Other (outside US)", NULL, NULL, 0, 56},
+};
+static const rvalue_t V_SITREP_pos[] = {
+    {0, "H: home", NULL, NULL, 0, 0},
+    {1, "M: mobile", NULL, NULL, 0, 1},
+    {2, "P: portable", NULL, NULL, 0, 2},
+};
+static const rvalue_t V_SITREP_power[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "I: intermittent", NULL, NULL, 0, 1},
+    {2, "N: no", NULL, NULL, 0, 2},
+};
+static const rvalue_t V_SITREP_water[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "C: contaminated", NULL, NULL, 0, 1},
+    {2, "N: no", NULL, NULL, 0, 2},
+};
+static const rvalue_t V_SITREP_sanitation[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "N: no", NULL, NULL, 0, 1},
+};
+static const rvalue_t V_SITREP_medical[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "N: no", NULL, NULL, 0, 1},
+};
+static const rvalue_t V_SITREP_comms[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "N: no", NULL, NULL, 0, 1},
+};
+static const rvalue_t V_SITREP_transport[] = {
+    {0, "Y: yes", NULL, NULL, 0, 0},
+    {1, "N: no", NULL, NULL, 0, 1},
+};
+static const rfield_t F_SITREP[] = {
+    {"cond", "1. Conditions at operator's location", RK_ENUM, 0, 2, 0, 3, 2u, V_SITREP_cond},
+    {"state", "2. Operator's location by state", RK_ENUM, 0, 6, 0, 57, 56u, V_SITREP_state},
+    {"pos", "3. Operator's position", RK_ENUM, 0, 2, 0, 3, 2u, V_SITREP_pos},
+    {"power", "4. Commercial power", RK_ENUM, 1, 2, 0, 3, 2u, V_SITREP_power},
+    {"water", "5. Water", RK_ENUM, 1, 2, 0, 3, 2u, V_SITREP_water},
+    {"sanitation", "6. Sanitation", RK_ENUM, 1, 1, 0, 2, 1u, V_SITREP_sanitation},
+    {"medical", "7. Medical", RK_ENUM, 1, 1, 0, 2, 1u, V_SITREP_medical},
+    {"comms", "8. Grid communications", RK_ENUM, 1, 1, 0, 2, 1u, V_SITREP_comms},
+    {"transport", "9. Transportation", RK_ENUM, 1, 1, 0, 2, 1u, V_SITREP_transport},
+};
+static const char J_SITREP[] = "{\"schema\":3,\"version\":1,\"name\":\"SITREP\",\"title\":\"Station SITREP\",\"map\":{\"role\":\"none\",\"label\":\"{cond} / {state} / {pos}\"},\"fields\":[{\"key\":\"cond\",\"label\":\"1. Conditions at operator's location\",\"kind\":\"enum\",\"values\":[{\"code\":0,\"name\":\"A: all stable\"},{\"code\":1,\"name\":\"B: moderate disruptions\"},{\"code\":2,\"name\":\"C: severe disruptions\"}]},{\"key\":\"state\",\"label\":\"2. Operator's location by state\",\"kind\":\"enum\",\"values\":[{\"code\":0,\"name\":\"AK\"},{\"code\":1,\"name\":\"AL\"},{\"code\":2,\"name\":\"AR\"},{\"code\":3,\"name\":\"AS\"},{\"code\":4,\"name\":\"AZ\"},{\"code\":5,\"name\":\"CA\"},{\"code\":6,\"name\":\"CO\"},{\"code\":7,\"name\":\"CT\"},{\"code\":8,\"name\":\"DC\"},{\"code\":9,\"name\":\"DE\"},{\"code\":10,\"name\":\"FL\"},{\"code\":11,\"name\":\"GA\"},{\"code\":12,\"name\":\"GU\"},{\"code\":13,\"name\":\"HI\"},{\"code\":14,\"name\":\"IA\"},{\"code\":15,\"name\":\"ID\"},{\"code\":16,\"name\":\"IL\"},{\"code\":17,\"name\":\"IN\"},{\"code\":18,\"name\":\"KS\"},{\"code\":19,\"name\":\"KY\"},{\"code\":20,\"name\":\"LA\"},{\"code\":21,\"name\":\"MA\"},{\"code\":22,\"name\":\"MD\"},{\"code\":23,\"name\":\"ME\"},{\"code\":24,\"name\":\"MI\"},{\"code\":25,\"name\":\"MN\"},{\"code\":26,\"name\":\"MO\"},{\"code\":27,\"name\":\"MP\"},{\"code\":28,\"name\":\"MS\"},{\"code\":29,\"name\":\"MT\"},{\"code\":30,\"name\":\"NC\"},{\"code\":31,\"name\":\"ND\"},{\"code\":32,\"name\":\"NE\"},{\"code\":33,\"name\":\"NH\"},{\"code\":34,\"name\":\"NJ\"},{\"code\":35,\"name\":\"NM\"},{\"code\":36,\"name\":\"NV\"},{\"code\":37,\"name\":\"NY\"},{\"code\":38,\"name\":\"OH\"},{\"code\":39,\"name\":\"OK\"},{\"code\":40,\"name\":\"OR\"},{\"code\":41,\"name\":\"PA\"},{\"code\":42,\"name\":\"PR\"},{\"code\":43,\"name\":\"RI\"},{\"code\":44,\"name\":\"SC\"},{\"code\":45,\"name\":\"SD\"},{\"code\":46,\"name\":\"TN\"},{\"code\":47,\"name\":\"TX\"},{\"code\":48,\"name\":\"UT\"},{\"code\":49,\"name\":\"VA\"},{\"code\":50,\"name\":\"VI\"},{\"code\":51,\"name\":\"VT\"},{\"code\":52,\"name\":\"WA\"},{\"code\":53,\"name\":\"WI\"},{\"code\":54,\"name\":\"WV\"},{\"code\":55,\"name\":\"WY\"},{\"code\":56,\"name\":\"Other (outside US)\"}]},{\"key\":\"pos\",\"label\":\"3. Operator's position\",\"kind\":\"enum\",\"values\":[{\"code\":0,\"name\":\"H: home\"},{\"code\":1,\"name\":\"M: mobile\"},{\"code\":2,\"name\":\"P: portable\"}]},{\"key\":\"power\",\"label\":\"4. Commercial power\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"I: intermittent\"},{\"code\":2,\"name\":\"N: no\"}]},{\"key\":\"water\",\"label\":\"5. Water\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"C: contaminated\"},{\"code\":2,\"name\":\"N: no\"}]},{\"key\":\"sanitation\",\"label\":\"6. Sanitation\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"N: no\"}]},{\"key\":\"medical\",\"label\":\"7. Medical\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"N: no\"}]},{\"key\":\"comms\",\"label\":\"8. Grid communications\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"N: no\"}]},{\"key\":\"transport\",\"label\":\"9. Transportation\",\"kind\":\"enum\",\"optional\":true,\"values\":[{\"code\":0,\"name\":\"Y: yes\"},{\"code\":1,\"name\":\"N: no\"}]}]}";
+/* Station SITREP: worst case 5 bytes on the air */
+static const rschema_t S_SITREP = {3, 1, RR_NONE, 9, 0, -1, -1, -1, 30, 240, "SITREP", "Station SITREP", "{cond} / {state} / {pos}", NULL, NULL, J_SITREP, F_SITREP};
+
 const rschema_t *const RSCHEMAS[] = {
     &S_POS,
     &S_SALUTE,
+    &S_SITREP,
 };
-const int RSCHEMA_COUNT = 2;
+const int RSCHEMA_COUNT = 3;
