@@ -263,7 +263,9 @@ internal sealed class Engine
         else route = "Audio: Windows default devices (no USB audio found) - set the DigiRig in Settings";
         string pttInfo = ptt.UsesSerial ? "PTT: opening..." : manual ? "PTT: manual (you key the radio)" : "PTT: none (transmit immediately)";
         Info?.Invoke(route, pttInfo);
-        audioKind = inDev >= 0 && outDev >= 0 && s.RadioInput != Devices.DefaultName ? "USB audio interface" : "Windows default speakers + mic (acoustic)";
+        audioKind = inDev < 0 || outDev < 0 ? "Windows default speakers + mic (acoustic)"
+            : Devices.LooksUsb(ins[inDev]) && Devices.LooksUsb(outs[outDev]) ? "USB audio interface"
+            : "PC sound devices (no USB interface)";
         Mode?.Invoke(Summary(s.Modem));
         ManualState?.Invoke(manual, "", 0);
 
@@ -388,7 +390,8 @@ internal sealed class Engine
         }
         catch (Exception e)
         {
-            Log?.Invoke(LogKind.Error, $"engine stopped: {e.Message}", -1, null);
+            App.LogError("engine", e);
+            Log?.Invoke(LogKind.Error, $"engine stopped: {e.Message} (details in {App.LogPath})", -1, null);
         }
         finally
         {
@@ -443,7 +446,8 @@ internal sealed class Engine
         }
         catch (Exception e)
         {
-            Log?.Invoke(LogKind.Error, $"engine stopped: {e.Message}", -1, null);
+            App.LogError("engine", e);
+            Log?.Invoke(LogKind.Error, $"engine stopped: {e.Message} (details in {App.LogPath})", -1, null);
         }
         finally
         {

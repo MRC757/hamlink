@@ -39,10 +39,13 @@ internal static class Devices
             return i >= 0 ? i : -2;
         }
         if (!preferUsb) return -1;
-        int u = names.FindIndex(n => n.Contains("USB", StringComparison.OrdinalIgnoreCase)
-                                  || n.Contains("DigiRig", StringComparison.OrdinalIgnoreCase));
+        int u = names.FindIndex(LooksUsb);
         return u >= 0 ? u : -1;
     }
+
+    /// <summary>True for device names that look like a USB radio interface (DigiRig and other USB codecs).</summary>
+    public static bool LooksUsb(string name) =>
+        name.Contains("USB", StringComparison.OrdinalIgnoreCase) || name.Contains("DigiRig", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>Records the PC's own microphone at 8 kHz (never the radio link) while held.</summary>
