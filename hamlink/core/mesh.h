@@ -51,6 +51,9 @@ void mesh_destroy(mesh_t *m);
 void mesh_set_relay(mesh_t *m, int enabled);
 /* Change fragment class, ACK timeout and the airtime-estimate bit rate on a live instance. */
 void mesh_configure(mesh_t *m, int frag_class, uint32_t ack_timeout_ms, uint32_t bps);
+/* Frames will go out as FX.25 with nroots (16, 32, 64) check bytes, or plain HDLC (0, the default): airtime estimates
+ * for burst packing and ACK timing follow. */
+void mesh_set_fec(mesh_t *m, int nroots);
 /* Payload bytes per fragment for a class, 0 if unknown. */
 int mesh_frag_size(int frag_class);
 

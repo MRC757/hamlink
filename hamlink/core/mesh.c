@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "mesh.h"
+#include "fx25.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +83,7 @@ struct mesh {
     int tx_since_id, id_queued;
     uint16_t next_id;
     uint8_t ack_serial;
+    int fec_nroots; /* frames go out as FX.25 with this many check bytes (0 = plain HDLC); airtime estimates follow */
     mesh_stats_t st;
 };
 
@@ -133,11 +135,20 @@ static uint32_t airtime_bps(size_t frame_len, uint32_t bps) {
 uint32_t mesh_frame_airtime_ms(size_t frame_len) { return airtime_bps(frame_len, BAUD); }
 uint32_t mesh_airtime_ms(size_t frame_len, uint32_t bps) { return airtime_bps(frame_len, bps < 300 ? BAUD : bps); }
 
+/* Airtime of one frame as this station sends it: an FX.25 block (tag, data, check bytes, 2 flags) or plain HDLC. */
+static uint32_t frame_air(const mesh_t *m, size_t frame_len) {
+    size_t fx = m->fec_nroots ? fx25_air_bytes(frame_len, m->fec_nroots) : 0;
+    if (!fx) return airtime_bps(frame_len, m->cfg.bps);
+    return (uint32_t)(((fx + 2) * 8 * 1000 + m->cfg.bps - 1) / m->cfg.bps);
+}
+
+void mesh_set_fec(mesh_t *m, int nroots) { m->fec_nroots = nroots == 16 || nroots == 32 || nroots == 64 ? nroots : 0; }
+
 /* How long to wait for the next fragment before sending a partial ACK. Fragments of one burst arrive about
  * one frame airtime apart (OFDM packets ~1.1 s, AFSK frames ~0.9 s; a TNC adds its own TX delay), so
  * wait well over that, or the sender mistakes a partial ACK for a lost burst and retransmits. */
 static uint32_t ack_gap_ms(const mesh_t *m, size_t frag_size) {
-    return airtime_bps(MESH_HDR_LEN + frag_size, m->cfg.bps) * 9 / 5 + 300;
+    return frame_air(m, MESH_HDR_LEN + frag_size) * 9 / 5 + 300;
 }
 
 int mesh_frag_size(int frag_class) {
@@ -392,7 +403,10 @@ static void handle_data(mesh_t *m, const uint8_t *f, size_t len, int to_me, uint
 
     rxslot_t *s = rx_slot_for(m, f + 3, id, now);
     if (!s) return;
-    if (!s->used || s->total != total || s->type != type || s->fclass != fclass) {
+    /* A slot taken over from another message (all slots in use: the oldest is reused) must start clean, or the new
+     * message inherits "delivered" and its fragment mask and is silently dropped (while still being ACKed). */
+    if (!s->used || s->id != id || memcmp(s->src, f + 3, MESH_CALL_LEN) || s->total != total || s->type != type ||
+        s->fclass != fclass) {
         uint8_t *keep = s->data;
         memset(s, 0, sizeof *s);
         s->data = keep;
@@ -592,7 +606,7 @@ int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens
         }
         for (int c = 0; c < nc; c++) {
             qent_t *e = &m->q[cand[c]];
-            uint32_t ms = airtime_bps(e->len, m->cfg.bps);
+            uint32_t ms = frame_air(m, e->len);
             if (np >= max_frames || bytes + e->len > cap ||
                 (np > 0 && total_ms + ms > m->cfg.burst_cap_ms)) { full = 1; break; }
             pick[np++] = cand[c];
@@ -640,7 +654,7 @@ int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens
      * say) goes out the moment our burst ends and collides with the ACK on a half-duplex channel: the broadcast is lost
      * and the acknowledged message needs a retry. Window = their ACK delay (40-120 ms) + their lead-in + the ACK frame. */
     if (expect_ack) {
-        uint64_t w = now + total_ms + m->cfg.preamble_ms + airtime_bps(MESH_HDR_LEN + 4, m->cfg.bps) + 120 + 400;
+        uint64_t w = now + total_ms + m->cfg.preamble_ms + frame_air(m, MESH_HDR_LEN + 4) + 120 + 400;
         if (w > m->holdoff_until) m->holdoff_until = w;
     }
     if (sent_non_id && !m->tx_since_id) {

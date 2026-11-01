@@ -24,6 +24,8 @@ start a report there.
   which decodes about 4-6 dB deeper into the noise in simulation.
 * **Reliable delivery:** acknowledgements and retries (selective-repeat ARQ), flood relay with duplicate suppression,
   carrier sense, automatic station ID.
+* **FX.25 error correction on AFSK**, on by default: repairs damaged bytes in each frame (up to 8, 16 or 32 depending on
+  the setting), while stations without FX.25 still read frames that arrive intact.
 * **Voice as store-and-forward clips** (Codec2 700C): a 5 s clip is about 500 bytes.
 * **Reports on a map:** position and SALUTE reports, coloured by the reporter's assessment, fading with age. Report types
   are JSON files (`hamlink/schemas/`), so adding one needs no code.

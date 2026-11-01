@@ -14,7 +14,8 @@
 #include "tone.h"
 #include "voice.h"
 
-#define HL_API_VERSION 7
+#define HL_API_VERSION 8
+#define HL_FEC_DEFAULT 16
 
 #define REPEAT_SLOTS 8
 #define SEEN_SLOTS 64
@@ -35,6 +36,7 @@ struct hl_ctx {
     meter_t meter;
     char callsign[16];
     int modem, link, manual;
+    int fec;                     /* FX.25 check bytes on the AFSK audio link (0 = plain AX.25-style HDLC) */
     uint32_t tnc_baud;
     ofdm_tx_t *otx;
     ofdm_rx_t *orx;
@@ -132,6 +134,8 @@ hl_ctx *HL_CALL hl_create(const char *callsign, int relay, int ttl, int preamble
     cfg.preamble_ms = (uint32_t)preamble_ms;
     mesh_cb_t cb = {cb_message, cb_status, cb_event};
     c->mesh = mesh_create(&cfg, &cb, c, seed);
+    c->fec = HL_FEC_DEFAULT;
+    if (c->mesh) mesh_set_fec(c->mesh, c->fec);
     c->demod = afsk_demod_create();
     c->voice = voice_create();
     tone_init(&c->tone, TONE_OFF);
@@ -240,7 +244,7 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
     if (noise < 1) noise = 1;
     if (noise > 6) noise = 6;
     size_t cap = c->modem == HL_MODEM_OFDM && c->otx ? ofdm_burst_max_samples(c->txlens, n, noise)
-                                                     : modem_burst_max_samples(c->txlens, n, c->preamble_ms, 2);
+                                                     : modem_burst_max_samples_fec(c->txlens, n, c->preamble_ms, 2, c->fec);
     if (cap == 0) return NULL;
     if (cap > c->txcap) {
         int16_t *nb = (int16_t *)realloc(c->txaudio, cap * sizeof(int16_t));
@@ -255,7 +259,7 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
         k = ofdm_encode_burst(c->otx, frames, c->txlens, n, c->callsign, noise, c->txaudio, c->txcap);
         for (size_t i = 0; i < k; i++) c->txaudio[i] = (int16_t)((float)c->txaudio[i] * amp);
     } else {
-        k = modem_encode_burst(frames, c->txlens, n, c->preamble_ms, 2, amp, c->txaudio, c->txcap);
+        k = modem_encode_burst_fec(frames, c->txlens, n, c->preamble_ms, 2, amp, c->fec, c->txaudio, c->txcap);
     }
     if (k == 0) return NULL;
     if (n_samples) *n_samples = (int)k;
@@ -304,6 +308,9 @@ void HL_CALL hl_get_meter(hl_ctx *c, float *out5) {
 
 /* One place that decides fragment size and ACK timing from modem, link and manual-PTT mode. */
 static void apply_timing(hl_ctx *c) {
+    /* FX.25 wraps only what this station modulates itself: AFSK on the audio link (OFDM has its own FEC; a TNC radio
+     * modulates its own frames) */
+    mesh_set_fec(c->mesh, c->link == HL_LINK_AUDIO && c->modem == HL_MODEM_AFSK ? c->fec : 0);
     if (c->link == HL_LINK_TNC) {
         /* the radio keys up, runs CSMA and queues frames by itself, so allow plenty of time for an ACK */
         mesh_configure(c->mesh, MESH_FRAG_CLASS_SMALL, c->tnc_baud >= 9600 ? 3500 : 5500, c->tnc_baud);
@@ -315,6 +322,15 @@ static void apply_timing(hl_ctx *c) {
     uint32_t ack = c->manual ? 45000u : ofdm ? 5500u : 3500u;
     mesh_configure(c->mesh, ofdm ? MESH_FRAG_CLASS_LARGE : MESH_FRAG_CLASS_SMALL, ack, 1200);
 }
+
+int HL_CALL hl_set_fec(hl_ctx *c, int check_bytes) {
+    if (check_bytes != 0 && check_bytes != 16 && check_bytes != 32 && check_bytes != 64) return -1;
+    c->fec = check_bytes;
+    apply_timing(c);
+    return 0;
+}
+
+void HL_CALL hl_get_fec_info(hl_ctx *c, uint32_t *out3) { afsk_demod_fec_stats(c->demod, out3); }
 
 int HL_CALL hl_set_modem(hl_ctx *c, int modem) {
     if (modem == HL_MODEM_OFDM) {

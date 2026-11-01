@@ -153,6 +153,15 @@ HL_API int HL_CALL hl_channel_busy(hl_ctx *c);
  *         repairs rejected by the structural check, channel busy now} */
 HL_API void HL_CALL hl_get_rx_info(hl_ctx *c, uint32_t *out6);
 
+/* ---- forward error correction on the AFSK link (API v8) ---- */
+/* Send AFSK frames as FX.25 with 16, 32 or 64 Reed-Solomon check bytes (corrects up to 8, 16 or 32 bad bytes per frame),
+ * or 0 for plain HDLC. Default 16. FX.25 is backward compatible: stations without it still decode the frame inside when
+ * it arrives error-free. Receiving FX.25 is always on. Costs airtime: about +25% on a full data frame, nearly double on an
+ * ACK. Ignored for OFDM (it has its own FEC) and in TNC mode. Returns 0, or -1 for any other value. */
+HL_API int HL_CALL hl_set_fec(hl_ctx *c, int check_bytes);
+/* out3 = {FX.25 blocks decoded, frames only FEC recovered (the plain decode missed them), bytes corrected} */
+HL_API void HL_CALL hl_get_fec_info(hl_ctx *c, uint32_t *out3);
+
 /* out8 = {rx_frames, rx_dups, tx_frames, relayed, relay_suppressed, retries, ofdm_packets_ok, ofdm_packets_failed} */
 HL_API void HL_CALL hl_get_stats(hl_ctx *c, uint32_t *out8);
 

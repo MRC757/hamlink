@@ -11,6 +11,25 @@ HDLC framing: `0x7E` flags, bit stuffing after five 1s, CRC-16/X.25 (poly 0x8408
 xorout 0xFFFF, low byte first). A PTT burst is: lead-in flags (default 500 ms), then frames
 separated by two flags, then two tail flags. One burst never exceeds `burst_cap_ms` (12 s).
 
+### FX.25 forward error correction (AFSK, on by default)
+Each frame may instead be sent as an **FX.25** block (TAPR FX.25 draft, interoperable with Dire Wolf and UZ7HO
+Soundmodem): a 64-bit correlation tag, then the frame as ordinary HDLC (flag, bit-stuffed frame and FCS, flag, and the
+flag pattern repeated to fill) in k data bytes, then the Reed-Solomon check bytes. All bytes LSB first, NRZI as above.
+Code: GF(256), field polynomial 0x11d, generator roots alpha^1 .. alpha^nroots (RS(255, 255 - nroots), shortened to the
+block size by leaving the unsent data bytes zero). The sender picks the smallest block that fits:
+
+| Check bytes (setting) | Blocks (data + check bytes) | Corrects up to |
+|---|---|---|
+| 16 (default) | 32+16, 64+16, 128+16, 239+16 | 8 bad bytes per frame |
+| 32 | 32+32, 64+32, 128+32, 223+32 | 16 |
+| 64 | 64+64, 128+64, 191+64 | 32 |
+
+Frames too large for a block are sent as plain HDLC. Receivers always try both: a tag is accepted with up to 8 of its 64
+bits wrong, the block is corrected, and the frame inside must still pass its CRC. A receiver without FX.25 sees the tag and
+check bytes as noise between flags and decodes the frame inside whenever it arrived error-free, so FX.25 and plain
+stations can share a channel. FX.25 is used only where this station modulates: not with the OFDM modem (it has its own
+FEC) and not in KISS TNC mode. Airtime estimates for burst packing and ACK timing use the FX.25 block size.
+
 ## Mesh header (23 bytes) followed by payload (max 96 bytes)
 | Offset | Size | Field |
 |---|---|---|

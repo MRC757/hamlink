@@ -37,6 +37,8 @@ internal sealed class Settings
     public int CarrierSenseMode { get; set; } = -1;
     /// <summary>Repair AFSK frames with a single wrong bit (default on).</summary>
     public bool BitRepair { get; set; } = true;
+    /// <summary>FX.25 error correction on transmitted AFSK frames: 0 off, or 16/32/64 Reed-Solomon check bytes. Receiving is always on.</summary>
+    public int AfskFec { get; set; } = 16;
     public int EffectiveCarrierSense => CarrierSenseMode is >= 0 and <= 2 ? CarrierSenseMode : (CarrierSense ? 2 : 0);
     /// <summary>0 = AFSK 1200 baud, 1 = OFDM (COFDMTV). Every station on the channel must use the same one.</summary>
     public int Modem { get; set; }
@@ -98,6 +100,7 @@ internal sealed class Settings
         Dest = Dest.Trim().ToUpperInvariant();
         Ttl = Math.Clamp(Ttl, 0, 3);
         Modem = Modem == 1 ? 1 : 0;
+        AfskFec = AfskFec is 0 or 16 or 32 or 64 ? AfskFec : 16;
         ManualCountdown = Math.Clamp(ManualCountdown, 2, 10);
         Transport = Transport == "tnc" ? "tnc" : "audio";
         TncBaud = TncBaud >= 9600 ? 9600 : 1200;

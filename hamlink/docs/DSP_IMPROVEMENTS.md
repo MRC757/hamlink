@@ -124,8 +124,34 @@ may already capture most of this (step 0 will tell). A cheaper variant that also
 correlator window lengths or a bandpass prefilter (Dire Wolf's "E" profile added one and gained about 18 frames over the
 older "C" profile). Costs 2-9x the demodulator CPU, currently 0.2% of one x86 core, so affordable.
 
-### 5. Forward error correction for the AFSK link (high value on weak links, protocol change) — deferred, see ROADMAP
-1200 baud packet has no FEC: one bad bit loses the frame. Options:
+### 5. Forward error correction for the AFSK link — **implemented 2026-11-01 as FX.25** (`core/fx25.c`)
+FX.25 was chosen over IL2P because it is backward compatible: stations without FX.25 (older HamLink builds, plain AX.25
+software) still decode every frame that arrives error-free, so no flag day is needed. Format: `docs/PROTOCOL.md`. Default:
+16 check bytes; Settings offers off, 16, 32 and 64. Receiving FX.25 is always on.
+
+Verification (Windows, through the C API the apps use; two stations joined by simulated audio):
+* Reed-Solomon against an independent implementation (Python `reedsolo`, same field, roots and byte order): check bytes
+  identical on 900 random blocks; every block with up to nroots/2 byte errors corrected (1,180 cases); all 900 blocks with
+  more errors refused, none miscorrected.
+* Previous release (no FX.25) receiving FX.25 transmissions on a clean channel: 30/30 frames at each of 16, 32 and 64.
+* Acknowledged two-fragment messages with FX.25 both ways: 4/4 delivered. Test CD scores unchanged (971 / 1001 / 100 /
+  103 frames); no frames from 30 minutes of noise.
+* Messages delivered out of 120 (80-byte text broadcasts, white noise, SNR in 2.7 kHz):
+
+| SNR | Plain | FX.25 16 | FX.25 32 | FX.25 64 |
+|---|---|---|---|---|
+| 4 dB | 1 | 6 | 40 | 98 |
+| 5 dB | 10 | 90 | 117 | 117 |
+| 6 dB | 77 | 119 | 120 | 120 |
+| 7 dB | 114 | 120 | 120 | 120 |
+| 8 dB | 119 | 120 | 120 | 120 |
+
+* Cost: that burst (500 ms lead-in, message, station ID) took 1.11 s plain, 1.55 s with 16 check bytes, 1.65 s with 32,
+  1.87 s with 64. Short frames such as ACKs nearly double; a full data fragment grows about 25%.
+* Not tested: interoperability with Dire Wolf or UZ7HO on real audio (the tags, code and packing follow Dire Wolf's
+  source), and real radios. White noise is the friendliest kind of damage; bursts of interference may behave differently.
+
+Background, from before the choice was made. 1200 baud packet has no FEC: one bad bit loses the frame. Options:
 * **FX.25** wraps an AX.25 frame in Reed-Solomon parity so FEC-aware receivers correct errors while plain AX.25 receivers
   still decode it. Its original small test (61 frames) found 15% decodable without FEC and 46% with it. FX.25 matters most
   in **Bluetooth-TNC mode** if a radio's TNC supports it (the BTECH radios' TNC is not documented to).

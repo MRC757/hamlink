@@ -22,6 +22,11 @@ Windows in Git Bash; mingw-w64 also works). MSVC cannot build it because Codec2 
 includes C++17 code (the OFDM modem) with the C++ runtime linked in statically. If `hamlink_core.dll` is missing or a
 different API version, the app says so at start-up instead of failing later.
 
+## Error correction (FX.25)
+Settings > *AFSK error correction*: FX.25 with 16 check bytes is the default; 32 or 64 repair more damage at the cost of
+longer transmissions, and *Off* sends plain frames. Receiving FX.25 is always on, and stations without FX.25 still read
+frames that arrive intact. When FX.25 rescues a damaged frame, the message log says so. Details: `../docs/PROTOCOL.md`.
+
 ## Hardware / Windows setup (DigiRig + Baofeng)
 1. Plug the DigiRig into USB. Windows adds a sound device ("USB Audio Device") and a COM port.
 2. **Settings > Privacy & security > Microphone > "Let desktop apps access your microphone" = On.**

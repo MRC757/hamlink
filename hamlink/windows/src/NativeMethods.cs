@@ -3,10 +3,10 @@ using System.Runtime.InteropServices;
 
 namespace HamLink;
 
-/// <summary>P/Invoke surface of hamlink_core.dll (core/hamlink_api.h). API version 7.</summary>
+/// <summary>P/Invoke surface of hamlink_core.dll (core/hamlink_api.h). API version 8.</summary>
 internal static class NativeMethods
 {
-    public const int ApiVersion = 7;
+    public const int ApiVersion = 8;
     const string Lib = "hamlink_core";
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -157,4 +157,11 @@ internal static class NativeMethods
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void hl_get_rx_info(IntPtr ctx, uint[] out6);
+
+    // ---- FX.25 error correction on the AFSK link (API v8) ----
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int hl_set_fec(IntPtr ctx, int checkBytes);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void hl_get_fec_info(IntPtr ctx, uint[] out3);
 }

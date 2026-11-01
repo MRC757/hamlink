@@ -18,6 +18,9 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   (100% of packets at 8 dB SNR, where AFSK frames were 55%) but it is **not faster**: on a clean link it used
   about 20% more airtime than AFSK for the same message, because every ACK burst carries OFDM lead-in symbols.
   Choose OFDM for weak or noisy paths, AFSK for speed and packet-radio interoperability.
+* **FX.25 error correction on AFSK** (on by default, 16 Reed-Solomon check bytes; 32 or 64 or off in Settings): repairs up
+  to 8/16/32 damaged bytes per frame, and stations without FX.25 still read frames that arrive intact. In simulated noise
+  at 5-6 dB SNR it raised delivery from 8-64% to 75-99% with 16 check bytes, at about 25% more airtime per data frame.
 * Selective-repeat ARQ, flood relay with duplicate suppression, CSMA, automatic station ID.
   Format: `docs/PROTOCOL.md`.
 * Voice is **store-and-forward clips** (Codec2 700C, 100 B/s), not live voice: 1200 bps can't carry
@@ -182,6 +185,9 @@ FM audio channel or a simulated byte link):
 * Receive DSP on real audio (WA8LMF TNC Test CD, measured on Windows with the shipped DLL): with the 900-2500 Hz prefilter
   and two slicers, 971 error-free frames from the de-emphasised traffic track (608 before) and 1001 from the flat one; no
   frames from 60 minutes of noise or the calibration-tone tracks. The pytest suite has not been re-run since this change.
+* FX.25 (Windows, through the C API): Reed-Solomon output identical to an independent implementation, corrections and
+  refusals checked on 3,000 blocks, backward compatibility with the previous release, acknowledged messages, and delivery
+  in simulated noise (`docs/DSP_IMPROVEMENTS.md` step 5). Not tested against Dire Wolf or UZ7HO, or on a real radio.
 * Geodesy: Maidenhead encode/decode checked against exact rational arithmetic (9000 random points), UTM/MGRS against
   `pyproj` and the `mgrs` package (a handful of points on exact grid-line ties differ by one metre), NMEA checksums and fix rules.
 * Reports and map: bit-packed codec round trips, size limits, every error path, a 200,000-case fuzz run under

@@ -173,6 +173,10 @@ internal sealed class Radio : IDisposable
     /// <summary>0 off, 1 only while data is detected, 2 data or loud audio (default).</summary>
     public void SetCarrierSense(int mode) => NativeMethods.hl_set_carrier_sense(ctx, mode);
     public void SetBitRepair(bool on) => NativeMethods.hl_set_bit_repair(ctx, on ? 1 : 0);
+    /// <summary>FX.25 on transmitted AFSK frames: 0 off, or 16/32/64 check bytes.</summary>
+    public void SetFec(int checkBytes) => NativeMethods.hl_set_fec(ctx, checkBytes);
+    /// <summary>{FX.25 blocks decoded, frames only FEC recovered, bytes corrected}</summary>
+    public uint[] GetFecInfo() { var v = new uint[3]; NativeMethods.hl_get_fec_info(ctx, v); return v; }
     /// <summary>The carrier-sense decision from the last Process call.</summary>
     public bool ChannelBusy => NativeMethods.hl_channel_busy(ctx) != 0;
     /// <summary>{data detected now, AFSK frames decoded, repaired, rejected ambiguous, rejected by structure check, busy}</summary>

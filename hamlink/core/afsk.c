@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "afsk.h"
+#include "fx25.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,10 +40,22 @@ size_t modem_burst_max_samples(const size_t *lens, int n, int preamble_ms, int t
     return bits * AFSK_SPB;
 }
 
+size_t modem_burst_max_samples_fec(const size_t *lens, int n, int preamble_ms, int tail_flags, int fec_nroots) {
+    size_t s = modem_burst_max_samples(lens, n, preamble_ms, tail_flags);
+    if (fec_nroots > 0) s += (size_t)n * (8 + FX25_BLOCK) * 8 * AFSK_SPB; /* tag and a whole block per frame, at most */
+    return s;
+}
+
 size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int n,
                           int preamble_ms, int tail_flags, float amp,
                           int16_t *out, size_t cap_samples) {
-    size_t max_samples = modem_burst_max_samples(lens, n, preamble_ms, tail_flags);
+    return modem_encode_burst_fec(frames, lens, n, preamble_ms, tail_flags, amp, 0, out, cap_samples);
+}
+
+size_t modem_encode_burst_fec(const uint8_t *const *frames, const size_t *lens, int n,
+                              int preamble_ms, int tail_flags, float amp, int fec_nroots,
+                              int16_t *out, size_t cap_samples) {
+    size_t max_samples = modem_burst_max_samples_fec(lens, n, preamble_ms, tail_flags, fec_nroots);
     size_t max_bits = max_samples / AFSK_SPB;
     uint8_t *bits = (uint8_t *)malloc(max_bits);
     if (!bits) return 0;
@@ -50,7 +63,9 @@ size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int 
     int pre_flags = (preamble_ms * AFSK_BAUD / 1000) / 8 + 1;
     int rc = hdlc_put_flags(&b, pre_flags);
     for (int i = 0; i < n && !rc; i++) {
-        rc |= hdlc_put_frame(&b, frames[i], lens[i]);
+        int fx = fec_nroots > 0 ? fx25_put_frame(&b, frames[i], lens[i], fec_nroots) : 1;
+        if (fx < 0) rc = -1;
+        else if (fx == 1) rc |= hdlc_put_frame(&b, frames[i], lens[i]); /* no FEC, or too large for an FX.25 block */
         rc |= hdlc_put_flags(&b, 2);
     }
     rc |= hdlc_put_flags(&b, tail_flags);
@@ -108,7 +123,8 @@ size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int 
 #define NSLICERS 2
 static const float SLICER_DB[NSLICERS] = {-1.0f, 2.0f};
 /* Frames from different slicers that end within this many samples of each other are one transmission. A genuine repeat
- * is at least a whole frame later. */
+ * is at least a whole frame later. An FX.25 copy is compared from the moment its block's tag was found instead: the
+ * plain HDLC copy of the same transmission ends inside that block. */
 #define DUP_WINDOW (10 * AFSK_SPB)
 #define RECENT 8
 
@@ -149,6 +165,8 @@ typedef struct {
     int ones_run, bits_since_flag, hdlc_dcd, q_clock, clock_dcd;
     /* bit repair: certainty of the tone decision behind every data bit of the current segment (index = hdlc raw index) */
     float seg_conf[HDLC_RAW_MAX];
+    fx25_rx_t fx;
+    uint64_t fx_start; /* sample at which the current FX.25 block's tag was found */
 } slicer_t;
 
 struct afsk_demod {
@@ -168,6 +186,7 @@ struct afsk_demod {
     uint8_t qrep[AFSK_RXQ];
     int qhead, qtail;
     uint32_t frames_ok, frames_repaired, repair_ambiguous;
+    uint32_t fec_blocks, fec_only, fec_bytes_fixed; /* FX.25 blocks decoded; frames only FEC recovered; bytes corrected */
     int repair_on;
     /* recently queued frames (end time, length, CRC) for cross-slicer duplicate suppression */
     uint64_t recent_t[RECENT];
@@ -187,6 +206,7 @@ afsk_demod_t *afsk_demod_create(void) {
         s->prev_tone = 1;
         s->bits_since_flag = 1 << 30;
         hdlc_rx_init(&s->hdlc);
+        fx25_rx_init(&s->fx);
     }
     return d;
 }
@@ -203,23 +223,27 @@ int afsk_demod_dcd(const afsk_demod_t *d) {
     return 0;
 }
 
-static void queue_frame(afsk_demod_t *d, const uint8_t *f, int len, int repaired) {
+static uint64_t recent_since(const afsk_demod_t *d) { return d->t > DUP_WINDOW ? d->t - DUP_WINDOW : 0; }
+
+/* Queues the frame unless the same frame was delivered at or after sample `since`. 1 if new, 0 if a duplicate. */
+static int queue_frame(afsk_demod_t *d, const uint8_t *f, int len, int repaired, uint64_t since) {
     uint16_t crc = hdlc_crc16(f, (size_t)len);
     for (int k = 0; k < RECENT; k++)
-        if (d->recent_len[k] == len && d->recent_crc[k] == crc && d->t - d->recent_t[k] <= DUP_WINDOW) return;
+        if (d->recent_len[k] == len && d->recent_crc[k] == crc && d->recent_t[k] >= since) return 0;
     d->recent_t[d->recent_head] = d->t;
     d->recent_len[d->recent_head] = (uint16_t)len;
     d->recent_crc[d->recent_head] = crc;
     d->recent_head = (d->recent_head + 1) % RECENT;
 
     int next = (d->qhead + 1) % AFSK_RXQ;
-    if (next == d->qtail) return; /* full: drop */
+    if (next == d->qtail) return 1; /* full: drop */
     memcpy(d->q[d->qhead], f, (size_t)len);
     d->qlen[d->qhead] = (uint16_t)len;
     d->qrep[d->qhead] = (uint8_t)repaired;
     d->qhead = next;
     d->frames_ok++;
     if (repaired) d->frames_repaired++;
+    return 1;
 }
 
 /* A segment of nb data bits between two flags failed its CRC. Data bit i = (tone[i] == tone[i-1]), so one wrong tone
@@ -248,7 +272,7 @@ static void try_repair(afsk_demod_t *d, slicer_t *s, size_t nb) {
         int len = hdlc_decode_raw(bits, nb, out, sizeof out);
         if (len > 0) { passes++; best_len = len; memcpy(best, out, (size_t)len); }
     }
-    if (passes == 1) queue_frame(d, best, best_len, 1);
+    if (passes == 1) queue_frame(d, best, best_len, 1, recent_since(d));
     else if (passes > 1) d->repair_ambiguous++;
 }
 
@@ -280,6 +304,16 @@ static void slice(afsk_demod_t *d, slicer_t *s, float am, float as) {
     size_t at = s->hdlc.n;
     if (at < HDLC_RAW_MAX) s->seg_conf[at] = fabsf(stat);
 
+    int fixed = 0, hunting = s->fx.state == 0;
+    int flen = fx25_rx_bit(&s->fx, bit, frame, sizeof frame, &fixed);
+    if (hunting && s->fx.state != 0) s->fx_start = d->t;
+    if (flen > 0) {
+        d->fec_blocks++;
+        d->fec_bytes_fixed += (uint32_t)fixed;
+        uint64_t since = s->fx_start > DUP_WINDOW ? s->fx_start - DUP_WINDOW : 0;
+        if (queue_frame(d, frame, flen, 0, since)) d->fec_only++;
+    }
+
     /* HDLC carrier detect */
     s->ones_run = bit ? s->ones_run + 1 : 0;
     if (s->ones_run >= 7) s->hdlc_dcd = 0; /* idle/abort: data never has more than 5 ones in a row */
@@ -289,7 +323,7 @@ static void slice(afsk_demod_t *d, slicer_t *s, float am, float as) {
     if (s->hdlc.n == 0 && s->hdlc.pat == 0x7E) { /* a flag just closed a segment */
         if (s->bits_since_flag == 8) s->hdlc_dcd = 1; /* two flags back to back: a preamble or frame gap */
         s->bits_since_flag = 0;
-        if (len > 0) queue_frame(d, frame, len, 0);
+        if (len > 0) queue_frame(d, frame, len, 0, recent_since(d));
         else if (d->repair_on && s->hdlc.last_nb) try_repair(d, s, s->hdlc.last_nb);
     }
 }
@@ -357,3 +391,8 @@ int afsk_demod_next_frame(afsk_demod_t *d, uint8_t *buf, size_t cap) {
 
 float afsk_demod_level(const afsk_demod_t *d) { return sqrtf(d->lvl); }
 uint32_t afsk_demod_frames_ok(const afsk_demod_t *d) { return d->frames_ok; }
+void afsk_demod_fec_stats(const afsk_demod_t *d, uint32_t *out3) {
+    out3[0] = d->fec_blocks;
+    out3[1] = d->fec_only;
+    out3[2] = d->fec_bytes_fixed;
+}

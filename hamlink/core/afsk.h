@@ -29,11 +29,17 @@ size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int 
                           int16_t *out, size_t cap_samples);
 /* Upper bound on samples modem_encode_burst may need. */
 size_t modem_burst_max_samples(const size_t *lens, int n, int preamble_ms, int tail_flags);
+/* Same, with each frame wrapped in FX.25 (fec_nroots = 16, 32 or 64 check bytes; 0 = plain HDLC). Frames too large for
+ * an FX.25 block go out as plain HDLC. Receivers always decode both. */
+size_t modem_encode_burst_fec(const uint8_t *const *frames, const size_t *lens, int n,
+                              int preamble_ms, int tail_flags, float amp, int fec_nroots,
+                              int16_t *out, size_t cap_samples);
+size_t modem_burst_max_samples_fec(const size_t *lens, int n, int preamble_ms, int tail_flags, int fec_nroots);
 
 /* ---------------- demodulator ----------------
  * 900-2500 Hz band-pass prefilter, one-bit tone correlators, then two slicers with different mark/space weightings
- * (-1 and +2 dB), each with its own clock recovery, HDLC receiver and bit repair. A frame decoded by both is
- * delivered once. */
+ * (-1 and +2 dB), each with its own clock recovery, HDLC receiver, FX.25 decoder and bit repair. A frame decoded more
+ * than once is delivered once. */
 typedef struct afsk_demod afsk_demod_t;
 
 afsk_demod_t *afsk_demod_create(void);
@@ -58,6 +64,8 @@ void afsk_demod_set_repair(afsk_demod_t *d, int on);
 /* Like afsk_demod_next_frame; *repaired = 1 if the frame was recovered by bit repair. */
 int afsk_demod_next_frame_ex(afsk_demod_t *d, uint8_t *buf, size_t cap, int *repaired);
 uint32_t afsk_demod_frames_repaired(const afsk_demod_t *d);
+/* FX.25 receive counters: {blocks decoded, frames that only FEC recovered (the plain decode missed them), bytes corrected} */
+void afsk_demod_fec_stats(const afsk_demod_t *d, uint32_t *out3);
 uint32_t afsk_demod_repair_ambiguous(const afsk_demod_t *d);   /* rejected: more than one flip gave a good CRC */
 
 #endif

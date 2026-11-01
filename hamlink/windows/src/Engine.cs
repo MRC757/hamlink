@@ -82,7 +82,8 @@ internal sealed class Engine
     string Summary(int modem)
     {
         string ptt = s.PttMode switch { "MANUAL" => "manual PTT (you key the radio)", "VOX" => "no PTT line (transmit immediately)", _ => $"PTT via {s.PttMode}" };
-        return $"{audioKind} · {ptt} · {(modem == Radio.ModemOfdm ? "OFDM" : "AFSK 1200")} · {(s.EffectiveCarrierSense switch { 0 => "carrier sense OFF", 1 => "carrier sense: data only", _ => "carrier sense on" })}";
+        string mod = modem == Radio.ModemOfdm ? "OFDM" : s.AfskFec > 0 ? $"AFSK 1200 + FX.25 ({s.AfskFec})" : "AFSK 1200";
+        return $"{audioKind} · {ptt} · {mod} · {(s.EffectiveCarrierSense switch { 0 => "carrier sense OFF", 1 => "carrier sense: data only", _ => "carrier sense on" })}";
     }
 
     volatile int pendingCache; // updated on the engine thread; the native context must not be touched from the UI thread
@@ -165,6 +166,7 @@ internal sealed class Engine
 
     long nextMapAt, nextClockAt, beaconDueAt;
     Fix? lastSelf;
+    uint fecOnlySeen;
 
     /// <summary>Called every loop turn on the engine thread (audio and TNC modes): clock, serial GPS, own position, map, beacon.</summary>
     void Housekeeping(Radio r, long t)
@@ -182,6 +184,13 @@ internal sealed class Engine
         {
             nextMapAt = t + 2000;
             MapUpdated?.Invoke(MapItem.Parse(r.MapSnapshot(t)));
+            var fec = r.GetFecInfo();
+            if (fec[1] > fecOnlySeen)
+            {
+                Log?.Invoke(LogKind.Event, $"FX.25 error correction recovered {fec[1] - fecOnlySeen} frame(s) that arrived damaged " +
+                    $"({fec[2]} bad bytes fixed so far)", -1, null);
+                fecOnlySeen = fec[1];
+            }
         }
         int minutes = s.BeaconMin;
         if (minutes > 0 && f != null)
@@ -202,6 +211,7 @@ internal sealed class Engine
         r.SetReportRepeat(s.ReportRepeat, RepeatIntervalMs);
         nextMapAt = nextClockAt = beaconDueAt = 0;
         lastSelf = null;
+        fecOnlySeen = 0;
         Positions.Apply(s);
     }
 
@@ -240,6 +250,7 @@ internal sealed class Engine
         if (!tnc && s.Modem == Radio.ModemOfdm && r.SetModem(Radio.ModemOfdm) != 0)
             Log?.Invoke(LogKind.Error, "OFDM modem could not start; using AFSK 1200", -1, null);
         r.SetLink(tnc ? Radio.LinkTnc : Radio.LinkAudio, s.TncBaud);
+        r.SetFec(s.AfskFec);
         AfterStart(r);
         if (tnc) { LoopTnc(r); return; }
         Log?.Invoke(LogKind.Event, "Modem: " + (s.Modem == Radio.ModemOfdm ? "OFDM (COFDMTV)" : "AFSK 1200 baud"), -1, null);

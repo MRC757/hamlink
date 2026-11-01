@@ -43,6 +43,14 @@ internal sealed class SettingsWindow : Window
     };
     readonly ComboBox sense = new();
     readonly CheckBox repair = new() { Content = "Repair single-bit errors in received frames", Margin = new Thickness(0, 6, 0, 0) };
+    static readonly (int Bytes, string Text)[] FecChoices =
+    {
+        (0, "Off (plain AX.25-style frames)"),
+        (16, "FX.25, 16 check bytes: fixes up to 8 bad bytes per frame (default)"),
+        (32, "FX.25, 32 check bytes: fixes up to 16"),
+        (64, "FX.25, 64 check bytes: fixes up to 32, longest transmissions"),
+    };
+    readonly ComboBox fec = new();
     readonly Slider manualSecs = new() { Minimum = 2, Maximum = 10, TickFrequency = 1, IsSnapToTickEnabled = true };
     readonly TextBlock manualLabel = new(), pttHint = new() { TextWrapping = TextWrapping.Wrap, Foreground = System.Windows.Media.Brushes.DimGray };
     readonly TextBlock ttlLabel = new(), preLabel = new(), txLabel = new(), busyLabel = new();
@@ -76,6 +84,8 @@ internal sealed class SettingsWindow : Window
         foreach (var t in SenseChoices) sense.Items.Add(t);
         sense.SelectedIndex = s.EffectiveCarrierSense;
         repair.IsChecked = s.BitRepair;
+        foreach (var f in FecChoices) fec.Items.Add(f.Text);
+        fec.SelectedIndex = Math.Max(0, Array.FindIndex(FecChoices, f => f.Bytes == s.AfskFec));
         link.Items.Add(LinkAudioText); link.Items.Add(LinkTncText);
         link.SelectedIndex = s.Transport == "tnc" ? 1 : 0;
         modem.Items.Add(ModemAfskText); modem.Items.Add(ModemOfdmText);
@@ -100,6 +110,7 @@ internal sealed class SettingsWindow : Window
 
         // --- audio link section
         Row(audioSection, "Modem (every station on the channel must use the same one)", modem);
+        Row(audioSection, "AFSK error correction (stations without FX.25 still read error-free frames)", fec);
         audioSection.Children.Add(modemHint);
         Row(audioSection, "Radio audio input (DigiRig)", radioIn);
         Row(audioSection, "Radio audio output (DigiRig)", radioOut);
@@ -231,6 +242,7 @@ internal sealed class SettingsWindow : Window
         s.CarrierSenseMode = Math.Max(0, sense.SelectedIndex);
         s.CarrierSense = s.CarrierSenseMode != 0;
         s.BitRepair = repair.IsChecked == true;
+        s.AfskFec = FecChoices[Math.Max(0, fec.SelectedIndex)].Bytes;
         s.Ttl = (int)ttl.Value;
         s.PreambleMs = (int)pre.Value;
         s.TxLevel = (float)tx.Value;
