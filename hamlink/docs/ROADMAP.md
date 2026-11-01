@@ -7,7 +7,7 @@ Sources for the DSP items are in `docs/DSP_IMPROVEMENTS.md`.
 | Item | What | Why deferred | Do it when |
 |---|---|---|---|
 | Score on the TNC Test CD | Run `tools/decode_wav.py` on WA8LMF Track 1 and 2 | The CD could not be downloaded in the build environment | Anyone with the CD: first priority, it ranks everything below |
-| Parallel demodulators | Several mark/space weightings or correlator lengths at once, keep any that decode. Dire Wolf "+" (9 slicers): 988 to 1004 frames on Track 2 | Our per-tone normalisation already decodes 99-100% at -9 to +12 dB twist in the simulator, so the gain cannot be shown without real recordings. Costs 2-9x demodulator CPU (now 0.2% of one x86 core) | Test CD or field recordings show frames that a different weighting decodes |
+| ~~Parallel demodulators~~ | **Done 2026-11-01:** 900-2500 Hz prefilter + slicers at -1 and +2 dB, 608 to 971 frames on the de-emphasised Test CD track (`docs/DSP_IMPROVEMENTS.md` step 4) | | |
 | Double-bit repair | Try pairs of the least certain bits | Dire Wolf warns repairs beyond one bit give occasional wrong data. HamLink has no other integrity check on text | Never by default; maybe as an option for position reports only |
 | FEC on the AFSK link | Reed-Solomon per frame, IL2P-style (with a CRC as IL2P+CRC added), or FX.25 so plain AX.25 receivers still decode | Protocol change, every station must update. OFDM already has strong FEC for weak paths | On-air loss rates show AFSK links that OFDM cannot serve (e.g. interoperability needed), or a TNC radio supports FX.25/IL2P |
 | FX.25 in Bluetooth-TNC mode | Use the radio TNC's FEC if it has one | The BTECH radios' TNC is not documented to support it | A radio with an FX.25/IL2P KISS TNC is in hand |

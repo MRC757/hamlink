@@ -4,9 +4,10 @@ Text and voice-clip messaging over cheap handheld VHF/UHF FM radios (Baofeng UV-
 Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT. Includes a simplex store-and-forward relay
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
-> **Review build 0.1.2 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host. The Android and Windows apps have
-> **never been compiled or run**, and **nothing has been tried on a real radio**. Expect build errors on the first
-> compile. Reports of those, with the exact error text, are the most useful feedback at this stage.
+> **Review build 0.1.2 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
+> The **Windows app now compiles and runs on Windows 11** (see *Status* below). The Android app has **never been compiled or
+> run**, and **nothing has been tried on a real radio**. Build errors and crashes, with the exact error text, are the most
+> useful feedback at this stage.
 
 * Two ways to reach the radio: **audio + PTT** (a DigiRig or sound card, works with any FM handheld) or a
   **KISS TNC over Bluetooth/serial** (radios with a built-in TNC, e.g. BTECH UV-PRO / Vero VR-N76, or a
@@ -26,6 +27,7 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   lat/lon or a Maidenhead grid square; icons change colour with the reporter's assessment and fade as they age;
   map tiles are cached on the device. Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
+  On Windows, right-click a point on the map to start a report at that location.
   See `docs/MAPS_AND_REPORTS.md` and `docs/EXTENDING.md`.
 * Amateur radio only: callsign required, no encryption, publicly documented protocol.
 
@@ -87,8 +89,10 @@ python3 tools/syntax_check.py           # Kotlin and C# syntax (no compiler)
 ```
 
 ## Build the apps
-**Windows:** see `windows/README.md` (`windows/build.ps1`, or `dotnet publish`). A prebuilt x64
-`hamlink_core.dll` is checked in at `windows/native/`; `windows/build-native.sh` rebuilds it.
+**Windows:** see `windows/README.md` (`windows/build.ps1`, or `dotnet publish`; builds with the .NET 8 or 9 SDK).
+VS Code: open the repository root; *Terminal > Run Build Task* builds, F5 runs under the debugger (C# Dev Kit extension).
+A prebuilt x64 `hamlink_core.dll` is checked in at `windows/native/`; `windows/build-native.sh` rebuilds it with zig
+(`pip install ziglang`) on Linux, macOS, or Windows in Git Bash. MSVC cannot build it: Codec2 uses C99 variable-length arrays.
 
 **Android:** open `android/` in Android Studio (NDK + CMake 3.22 from the SDK Manager). There is no Gradle wrapper
 in the zip (`gradlew` could not be generated here); Android Studio creates it, or run `gradle wrapper` with Gradle 8.9+
@@ -171,6 +175,9 @@ FM audio channel or a simulated byte link):
 * Receive DSP: single-bit repair raises frame success at 8 dB SNR from 56% to 76% and at 9 dB from 88% to 97%, with no
   wrong frames in 1,200 heavily damaged frames or 20 minutes of noise; data carrier detect stays off for noise, voice-like
   audio and steady tones, and comes on within 20 ms of data.
+* Receive DSP on real audio (WA8LMF TNC Test CD, measured on Windows with the shipped DLL): with the 900-2500 Hz prefilter
+  and two slicers, 971 error-free frames from the de-emphasised traffic track (608 before) and 1001 from the flat one; no
+  frames from 60 minutes of noise or the calibration-tone tracks. The pytest suite has not been re-run since this change.
 * Geodesy: Maidenhead encode/decode checked against exact rational arithmetic (9000 random points), UTM/MGRS against
   `pyproj` and the `mgrs` package (a handful of points on exact grid-line ties differ by one metre), NMEA checksums and fix rules.
 * Reports and map: bit-packed codec round trips, size limits, every error path, a 200,000-case fuzz run under
@@ -178,18 +185,22 @@ FM audio channel or a simulated byte link):
   station tint, ageing/expiry, grid-square uncertainty rings, and end-to-end delivery over the simulated radio channel directly
   and through a relay (unknown future report types are relayed and ignored by the map).
 
-Windows DLL: cross-compiled with zig (C and C++17); confirmed a valid x64 PE (API version 7, 46 exported functions, including every one the C# declares)
-that imports only the Universal CRT and KERNEL32. It has **never been executed** (no Windows or Wine here).
-The C# and Kotlin were syntax-parsed (`python3 tools/syntax_check.py`, tree-sitter; this caught one real Kotlin
-comment-nesting error), JNI and P/Invoke names were cross-checked against the C export tables (the rebuilt DLL
-exports every function the C# declares), the XAML checked for well-formedness and handler/binding
-names, the P/Invoke signatures cross-checked against the C header by argument count, and the JNI library
-linked on the host, but **none of the app code has been compiled** (no .NET SDK or Android SDK here).
+Windows app (2026-11-01, one Windows 11 PC, no radio attached): compiled with the .NET 9 SDK and run. The first build
+needed fixes (missing usings, an NAudio API mismatch, the App.xaml entry point, and the native DLL renamed from
+`hamlink.dll` to `hamlink_core.dll` because it collided with `HamLink.dll` on Windows' case-insensitive file system).
+Exercised by hand: start-up, Settings, a grid-square position, OpenStreetMap tiles downloading and drawing, pan/zoom,
+Start/Stop, sending text with manual PTT, the modem switch, and a SALUTE report started by right-clicking the map.
+At start-up the app checks `hamlink_core.dll` and its API version and stops with a clear message if it is missing or
+mismatched; errors are written with stack traces to `%LOCALAPPDATA%\HamLink\error.log`. The DLL (zig, C and C++17, API
+version 7, 46 exports) imports only the Universal CRT and KERNEL32.
+The Kotlin was syntax-parsed (`python3 tools/syntax_check.py`, tree-sitter; this caught one real Kotlin
+comment-nesting error), JNI names were cross-checked against the C export tables, and the JNI library linked on the
+host, but **the Android app has not been compiled** (no Android SDK here).
 
-**Not verified**: the map, GPS, tile download and report-form code in both apps (Android Compose canvas drawing,
-gesture handling, `LocationManager`, Windows `Geolocator`, WPF `OnRender`, HTTP tile fetching and the disk cache) and
-how the map looks and feels; whether OpenStreetMap tile requests succeed from these apps; the apps' audio, Bluetooth, USB-serial and UI behaviour (including the manual-PTT countdown
-flow and the live modem switch, which exist only as code and syntax-checked UI), Android's C++ (NDK) build of the
+**Not verified**: the Android app as a whole (Compose canvas drawing, gesture handling, `LocationManager`, its map and
+report form); on Windows, the location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips,
+Test / Calibrate, KISS TNC mode, and two copies of the app exchanging messages; the apps' audio, Bluetooth and
+USB-serial behaviour with real hardware, Android's C++ (NDK) build of the
 OFDM modem, and **nothing has touched a real radio**. In particular: Bluetooth SPP/virtual-COM connection to a
 real UV-PRO-class radio (based on third-party descriptions of how it works, not on a test), whether such a
 radio accepts these AX.25 frames as-is, FM limiter/pre-emphasis/squelch behaviour in the audio path, PTT
@@ -200,9 +211,9 @@ see `third_party/aicodix/`). Rattlegram snapshot used: aicodix/rattlegram commit
 
 ## Known issues and open questions
 Things a reviewer may trip over, roughly in order of how likely they are to matter:
-1. **First compile.** Neither app has been built. Likely trouble spots: Compose API details in `MapView.kt` /
-   `ReportForm.kt` / `MapScreen.kt` (FlowRow is marked experimental), WinRT `Geolocator` use in `Positions.cs`
-   (needs the `net8.0-windows10.0.19041.0` target already set in `HamLink.csproj`), and the NDK build of the C++ OFDM modem.
+1. **Android first compile.** The Android app has not been built. Likely trouble spots: Compose API details in
+   `MapView.kt` / `ReportForm.kt` / `MapScreen.kt` (FlowRow is marked experimental) and the NDK build of the C++ OFDM modem.
+   The Windows app builds and runs; its untested parts are listed under *Status* above.
 2. **Broadcast reports are not acknowledged.** On a lossy link a report can be lost without the sender knowing. Map setup >
    *Repeat my reports* (off by default) sends 1 or 2 extra copies about 30 s apart (plus random spread); receivers drop the
    copies. Each copy is a transmission.
@@ -214,9 +225,10 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
 6. **Hostile/Suspect is the reporter's choice**, sent to everyone in range with no confirmation step.
 7. **Windows location service** fixes worse than 150 m are refused (Wi-Fi/IP positioning), so a PC without a GPS receiver
    needs typed coordinates, a grid square or a serial GPS.
-8. **Receiver DSP.** Data carrier detect, single-bit repair and a two-speed clock loop are in (results in
-   `docs/DSP_IMPROVEMENTS.md`), measured only in the simulator. Its score on the WA8LMF TNC Test CD is still unknown:
-   `tools/decode_wav.py` produces it. Further ideas (parallel demodulators, FEC) are in `docs/ROADMAP.md`.
+8. **Receiver DSP.** Data carrier detect, single-bit repair, a two-speed clock loop, a 900-2500 Hz band-pass prefilter
+   and two parallel slicers are in. On the WA8LMF TNC Test CD it decodes 971 error-free frames from the de-emphasised
+   traffic track (608 before the prefilter and slicers) and 1001 from the flat one; details in `docs/DSP_IMPROVEMENTS.md`.
+   The Linux test suite has not been re-run since that change. Further ideas (FEC) are in `docs/ROADMAP.md`.
 9. **Amateur use only.** No encryption, by design. Reports and messages are readable by anyone.
 
 ## Licence

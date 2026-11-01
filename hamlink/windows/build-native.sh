@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild windows/native/hamlink_core.dll (x64) from core/ + third_party/ on Linux/macOS.
+# Rebuild windows/native/hamlink_core.dll (x64) from core/ + third_party/ on Linux, macOS, or Windows (Git Bash).
 # Uses zig as the cross compiler (pip install ziglang) or mingw-w64 if you have it installed.
 # The COFDMTV modem is C++17, so the link step uses the C++ driver (libc++ is linked statically).
 set -euo pipefail
@@ -12,7 +12,13 @@ CSRC=("$ROOT"/core/{hamlink_api,voice,hdlc,afsk,mesh,tone,tnc,geo,nmea,report,ma
 if command -v x86_64-w64-mingw32-gcc >/dev/null; then
   CC=(x86_64-w64-mingw32-gcc); CXX=(x86_64-w64-mingw32-g++); LD=(x86_64-w64-mingw32-g++ -static-libgcc -static-libstdc++)
 else
-  CC=(python3 -m ziglang cc -target x86_64-windows-gnu); CXX=(python3 -m ziglang c++ -target x86_64-windows-gnu); LD=("${CXX[@]}")
+  # first Python that has zig; on Windows "python3" may be the Microsoft Store placeholder, which cannot import anything
+  PY=""
+  for c in python3 python; do
+    if "$c" -c "import ziglang" >/dev/null 2>&1; then PY="$c"; break; fi
+  done
+  [ -n "$PY" ] || { echo "no compiler: pip install ziglang (or install mingw-w64)" >&2; exit 1; }
+  CC=("$PY" -m ziglang cc -target x86_64-windows-gnu); CXX=("$PY" -m ziglang c++ -target x86_64-windows-gnu); LD=("${CXX[@]}")
 fi
 
 i=0; OBJS=()

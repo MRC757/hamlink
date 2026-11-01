@@ -42,7 +42,7 @@ The WA8LMF TNC Test CD is the usual benchmark for 1200 baud packet receivers. It
 and CRC as HamLink's audio link, so our demodulator can be scored on it directly:
 `python3 tools/decode_wav.py 02_Track_2.wav`. Published scores on Track 2 give a yardstick: Dire Wolf decodes about 1000+
 error-free frames, older hardware TNCs and first-generation sound-card modems fewer. The CD could not be downloaded from
-this build environment, so **our score is unknown** and is the first thing a reviewer with the CD can produce. Recordings
+this build environment at first; **scores are now in step 4** (measured 2026-11-01). Recordings
 of your own radio (squelch, VOX, acoustic coupling) are just as valuable: `decode_wav.py` accepts any WAV.
 
 ### 1. Detect data, not loudness, for "channel busy" (high value, low cost, no protocol change)
@@ -89,7 +89,29 @@ Cost: about 8 x frame-length CRC checks per bad frame, negligible on a phone.
    it. Counters for repairs and both kinds of rejection are available (`hl_get_rx_info`).
 It can be switched off in Settings. Double-bit repair was not added (Dire Wolf's caution, above).
 
-### 4. Multiple slicers / parallel demodulators (medium value, more CPU) — deferred, see ROADMAP
+### 4. Multiple slicers / parallel demodulators, with a band-pass prefilter — **implemented 2026-11-01**
+Measured on the WA8LMF TNC Test CD (ISO "TNC_Test_2", tracks resampled 44.1 to 48 kHz, left channel, error-free frames,
+bit repair off). The ISO's track names do not match their contents: tracks 1 and 2 are the same 25.8-minute traffic
+recording, flat and de-emphasised; track 3 holds the 100 Mic-E bursts.
+
+| Receiver | Track 2 (de-emphasised) | Track 1 (flat) | Track 4 (drive test) |
+|---|---|---|---|
+| Before: one slicer, no prefilter | 608 | 964 | 88 |
+| 9 weightings -4..+4 dB, no prefilter | 687 | 979 | 91 |
+| 900-2500 Hz prefilter only, 0 dB | 865 | 981 | 99 |
+| **Now: 900-2500 Hz prefilter + slicers at -1 and +2 dB** | **971** (983 with repair) | **1001** (1019) | **103** (109) |
+
+What was learned:
+* **The prefilter matters most.** The one-bit tone correlators pass hum, hiss and voice-band energy outside the tones.
+  A 241-tap (5-bit) FIR band-pass did as well as a 481-tap one; 1000-2400 Hz scored like 900-2500; 700-2700 was worse.
+* **Weightings must be small here.** Each tone is normalised to its own peak before slicing, so at +/-6 dB one tone wins
+  every bit; Dire Wolf's -6..+12 dB range applies to raw levels and does not carry over. With the prefilter,
+  de-emphasised audio slices best near +2 dB and flat audio near -1 dB, hence those two slicers.
+* **No false decodes:** 0 frames from 60 minutes of white noise (-40, -20, -6 dBFS) and from the CD's three
+  calibration-tone tracks, with and without bit repair.
+* CPU: about 140x real time on one x86 core including Python call overhead (under 1% of a core). The FIR is the main
+  cost; measure on a phone before relying on it there, and consider an IIR band-pass if it is too slow.
+* Not re-run after the change: the Linux pytest suite (`tests/`), including `test_dsp.py`.
 Dire Wolf runs 9 slicers with different mark/space weightings (about 2.3 dB apart, -6 to +12 dB) and keeps any that
 decode. On Track 2 that took it from 988 to 1004 frames (and 1022 with bit repair). The best single weighting differed
 between flat and de-emphasised audio, which is the point: one setting cannot suit every radio. Our per-tone normalisation

@@ -30,7 +30,10 @@ size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int 
 /* Upper bound on samples modem_encode_burst may need. */
 size_t modem_burst_max_samples(const size_t *lens, int n, int preamble_ms, int tail_flags);
 
-/* ---------------- demodulator ---------------- */
+/* ---------------- demodulator ----------------
+ * 900-2500 Hz band-pass prefilter, one-bit tone correlators, then two slicers with different mark/space weightings
+ * (-1 and +2 dB), each with its own clock recovery, HDLC receiver and bit repair. A frame decoded by both is
+ * delivered once. */
 typedef struct afsk_demod afsk_demod_t;
 
 afsk_demod_t *afsk_demod_create(void);

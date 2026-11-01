@@ -2,11 +2,11 @@
 
 WPF (.NET 8) front end over the same C core as the Android app (`hamlink_core.dll` = modem + ARQ + relay
 + Codec2). Text, push-to-talk voice clips, simplex store-and-forward relay mode, and a map with
-position and SALUTE reports. **Freshly building and launching, not yet verified end to end**: please
-report build errors or crashes with the full text.
+position and SALUTE reports. **Builds and runs on Windows 11; not yet tested with a radio or a second station**: please
+report problems with the full text. Errors are logged with stack traces to `%LOCALAPPDATA%\HamLink\error.log`.
 
 ## Build
-On any PC with the .NET 8 SDK (needs NuGet **once** for NAudio 2.2.1 and System.IO.Ports 8.0.0):
+On any PC with the .NET 8 or 9 SDK (needs NuGet **once** for NAudio 2.2.1 and System.IO.Ports 8.0.0):
 
     powershell -File build.ps1          # or: dotnet publish -c Release -r win-x64 --self-contained -o publish
 
@@ -14,8 +14,13 @@ Copy the whole `publish` folder to the target machine. It is **self-contained** 
 **not single-file** (nothing is unpacked to %TEMP%), so it runs on an air-gapped PC. `hamlink_core.dll` only
 depends on the Windows Universal CRT, which is built into Windows 10/11.
 
-To rebuild the native DLL after changing `core/`: `./build-native.sh` (Linux/macOS; zig or mingw-w64). The DLL now
-includes C++17 code (the OFDM modem) with the C++ runtime linked in statically.
+In VS Code, open the repository root: *Terminal > Run Build Task* builds and F5 runs under the debugger (needs the
+C# Dev Kit extension).
+
+To rebuild the native DLL after changing `core/`: `pip install ziglang`, then `bash build-native.sh` (Linux, macOS, or
+Windows in Git Bash; mingw-w64 also works). MSVC cannot build it because Codec2 uses C99 variable-length arrays. The DLL
+includes C++17 code (the OFDM modem) with the C++ runtime linked in statically. If `hamlink_core.dll` is missing or a
+different API version, the app says so at start-up instead of failing later.
 
 ## Hardware / Windows setup (DigiRig + Baofeng)
 1. Plug the DigiRig into USB. Windows adds a sound device ("USB Audio Device") and a COM port.
@@ -49,8 +54,11 @@ The radio-side details and caveats are in the top-level README (none of this is 
 Messages / Map switch in the header. Position sources: typed lat/lon, grid square, the Windows location service, or a
 serial NMEA GPS (COM port; read while the radio is running). The project targets `net8.0-windows10.0.19041.0` so the Windows
 location API is available. To use it: Settings > Privacy & security > Location > turn on Location services
-and "Let desktop apps access your location". Map tiles are cached in `%LOCALAPPDATA%\HamLink\tiles`. Details: `docs/MAPS_AND_REPORTS.md`,
-extending: `docs/EXTENDING.md`. None of this has been compiled or run.
+and "Let desktop apps access your location". Map tiles are cached in `%LOCALAPPDATA%\HamLink\tiles`.
+**New report...** (radio started) opens the report form at your own position; **right-click a point on the map** to open it
+at that location instead. Details: `docs/MAPS_AND_REPORTS.md`, extending: `docs/EXTENDING.md`.
+Tried on one PC: grid-square position, tile download and drawing, and a SALUTE report from a right-click. The Windows location
+service and serial GPS are untested.
 
 ## Notes
 * Opening a serial port can pulse RTS/DTR for a few ms in some Windows drivers, which may blip the

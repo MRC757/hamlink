@@ -96,7 +96,24 @@ size_t modem_encode_burst(const uint8_t *const *frames, const size_t *lens, int 
 #define REPAIR_MIN_BITS 200   /* smallest mesh frame (23-byte header + 1 + CRC) is 208 bits */
 #define REPAIR_MAX_BITS 1700  /* largest mesh frame (23 + 145 + CRC) with worst-case stuffing is about 1630 */
 
+/* Receive prefilter: linear-phase FIR band-pass 900-2500 Hz (Hamming window, 241 taps = 5 bit lengths, 2.5 ms delay).
+ * The tone correlators are only one bit long, so on their own they let in hum, hiss and voice-band energy outside the
+ * two tones. On the WA8LMF TNC Test CD this filter raised error-free frames by 42% on the de-emphasised track and 2% on
+ * the flat one (docs/DSP_IMPROVEMENTS.md). */
+#define PF_TAPS 241
+#define PF_LO 900.0
+#define PF_HI 2500.0
+/* Parallel slicers over the same tone correlators: different mark/space weightings, each with its own clock recovery,
+ * HDLC receiver and bit repair. After the prefilter, de-emphasised audio slices best near +2 dB and flat near -1 dB. */
+#define NSLICERS 2
+static const float SLICER_DB[NSLICERS] = {-1.0f, 2.0f};
+/* Frames from different slicers that end within this many samples of each other are one transmission. A genuine repeat
+ * is at least a whole frame later. */
+#define DUP_WINDOW (10 * AFSK_SPB)
+#define RECENT 8
+
 static float g_cm[PERIOD], g_sm[PERIOD], g_cs[PERIOD], g_ss[PERIOD];
+static float g_pf[PF_TAPS];
 static int g_tables_ready = 0;
 
 static void init_tables(void) {
@@ -109,8 +126,30 @@ static void init_tables(void) {
         g_cs[i] = (float)cos(ps);
         g_ss[i] = (float)sin(ps);
     }
+    /* windowed-sinc band-pass, scaled to unity gain at the band centre (same design as scipy firwin, pass_zero=False) */
+    double h[PF_TAPS], gain = 0.0;
+    const int M = PF_TAPS - 1;
+    for (int i = 0; i < PF_TAPS; i++) {
+        double n = i - M / 2.0;
+        double v = n == 0.0 ? 2.0 * (PF_HI - PF_LO) / AFSK_FS
+                            : (sin(TWO_PI * PF_HI * n / AFSK_FS) - sin(TWO_PI * PF_LO * n / AFSK_FS)) / (TWO_PI / 2.0 * n);
+        h[i] = v * (0.54 - 0.46 * cos(TWO_PI * i / M));
+        gain += h[i] * cos(TWO_PI * (PF_LO + PF_HI) / 2.0 * n / AFSK_FS);
+    }
+    for (int i = 0; i < PF_TAPS; i++) g_pf[i] = (float)(h[i] / gain);
     g_tables_ready = 1;
 }
+
+typedef struct {
+    float gain; /* mark weighting */
+    int last_sign;
+    float phase;
+    int prev_tone;
+    hdlc_rx_t hdlc;
+    int ones_run, bits_since_flag, hdlc_dcd, q_clock, clock_dcd;
+    /* bit repair: certainty of the tone decision behind every data bit of the current segment (index = hdlc raw index) */
+    float seg_conf[HDLC_RAW_MAX];
+} slicer_t;
 
 struct afsk_demod {
     float hist[WIN];
@@ -120,20 +159,20 @@ struct afsk_demod {
     float xprev, yprev;
     float lvl;
     float pm, ps; /* running peak amplitude per tone */
-    int last_sign;
-    float phase;
-    int prev_tone;
-    hdlc_rx_t hdlc;
+    float pfbuf[2 * PF_TAPS]; /* prefilter history, stored twice so the newest PF_TAPS samples are contiguous */
+    int pfpos;
+    uint64_t t; /* samples processed */
+    slicer_t sl[NSLICERS];
     uint8_t q[AFSK_RXQ][HDLC_MAX_FRAME];
     uint16_t qlen[AFSK_RXQ];
     uint8_t qrep[AFSK_RXQ];
     int qhead, qtail;
     uint32_t frames_ok, frames_repaired, repair_ambiguous;
-    /* carrier detect */
-    int ones_run, bits_since_flag, hdlc_dcd, q_clock, clock_dcd;
-    /* bit repair: certainty of the tone decision behind every data bit of the current segment (index = hdlc raw index) */
     int repair_on;
-    float seg_conf[HDLC_RAW_MAX];
+    /* recently queued frames (end time, length, CRC) for cross-slicer duplicate suppression */
+    uint64_t recent_t[RECENT];
+    uint16_t recent_len[RECENT], recent_crc[RECENT];
+    int recent_head;
 };
 
 afsk_demod_t *afsk_demod_create(void) {
@@ -141,20 +180,38 @@ afsk_demod_t *afsk_demod_create(void) {
     afsk_demod_t *d = (afsk_demod_t *)calloc(1, sizeof *d);
     if (!d) return NULL;
     d->pm = d->ps = PEAK_FLOOR;
-    d->prev_tone = 1;
     d->repair_on = 1;
-    d->bits_since_flag = 1 << 30;
-    hdlc_rx_init(&d->hdlc);
+    for (int k = 0; k < NSLICERS; k++) {
+        slicer_t *s = &d->sl[k];
+        s->gain = powf(10.0f, SLICER_DB[k] / 20.0f);
+        s->prev_tone = 1;
+        s->bits_since_flag = 1 << 30;
+        hdlc_rx_init(&s->hdlc);
+    }
     return d;
 }
 
 void afsk_demod_destroy(afsk_demod_t *d) { free(d); }
 
+static int slicer_dcd(const slicer_t *s) {
+    return s->hdlc_dcd || (s->clock_dcd && s->bits_since_flag < FLAG_RECENT_BITS);
+}
+
 int afsk_demod_dcd(const afsk_demod_t *d) {
-    return d->hdlc_dcd || (d->clock_dcd && d->bits_since_flag < FLAG_RECENT_BITS);
+    for (int k = 0; k < NSLICERS; k++)
+        if (slicer_dcd(&d->sl[k])) return 1;
+    return 0;
 }
 
 static void queue_frame(afsk_demod_t *d, const uint8_t *f, int len, int repaired) {
+    uint16_t crc = hdlc_crc16(f, (size_t)len);
+    for (int k = 0; k < RECENT; k++)
+        if (d->recent_len[k] == len && d->recent_crc[k] == crc && d->t - d->recent_t[k] <= DUP_WINDOW) return;
+    d->recent_t[d->recent_head] = d->t;
+    d->recent_len[d->recent_head] = (uint16_t)len;
+    d->recent_crc[d->recent_head] = crc;
+    d->recent_head = (d->recent_head + 1) % RECENT;
+
     int next = (d->qhead + 1) % AFSK_RXQ;
     if (next == d->qtail) return; /* full: drop */
     memcpy(d->q[d->qhead], f, (size_t)len);
@@ -168,16 +225,16 @@ static void queue_frame(afsk_demod_t *d, const uint8_t *f, int len, int repaired
 /* A segment of nb data bits between two flags failed its CRC. Data bit i = (tone[i] == tone[i-1]), so one wrong tone
  * decision corrupts data bits j and j+1. Try flipping each of the least certain tone decisions; keep the result only if
  * exactly one candidate passes the CRC (two passing means at least one is a false match, so neither can be trusted). */
-static void try_repair(afsk_demod_t *d, size_t nb) {
+static void try_repair(afsk_demod_t *d, slicer_t *s, size_t nb) {
     if (nb < REPAIR_MIN_BITS || nb > REPAIR_MAX_BITS) return;
     int cand[REPAIR_CANDIDATES], nc = 0;
     for (size_t j = 0; j + 1 < nb; j++) { /* the last data bit's tone also starts the closing flag: leave it */
-        float c = d->seg_conf[j];
+        float c = s->seg_conf[j];
         if (nc < REPAIR_CANDIDATES) { cand[nc++] = (int)j; }
         else {
             int worst = 0;
-            for (int k = 1; k < nc; k++) if (d->seg_conf[cand[k]] > d->seg_conf[cand[worst]]) worst = k;
-            if (c < d->seg_conf[cand[worst]]) cand[worst] = (int)j;
+            for (int k = 1; k < nc; k++) if (s->seg_conf[cand[k]] > s->seg_conf[cand[worst]]) worst = k;
+            if (c < s->seg_conf[cand[worst]]) cand[worst] = (int)j;
         }
     }
     uint8_t bits[HDLC_RAW_MAX];
@@ -185,7 +242,7 @@ static void try_repair(afsk_demod_t *d, size_t nb) {
     int passes = 0, best_len = 0;
     for (int k = 0; k < nc; k++) {
         size_t j = (size_t)cand[k];
-        memcpy(bits, d->hdlc.raw, nb);       /* hdlc.raw still holds the segment: it is only reset in length */
+        memcpy(bits, s->hdlc.raw, nb);       /* hdlc.raw still holds the segment: it is only reset in length */
         bits[j] ^= 1;
         bits[j + 1] ^= 1;
         int len = hdlc_decode_raw(bits, nb, out, sizeof out);
@@ -195,16 +252,64 @@ static void try_repair(afsk_demod_t *d, size_t nb) {
     else if (passes > 1) d->repair_ambiguous++;
 }
 
-void afsk_demod_process(afsk_demod_t *d, const int16_t *s, size_t n) {
+static void slice(afsk_demod_t *d, slicer_t *s, float am, float as) {
     uint8_t frame[HDLC_MAX_FRAME];
+    float stat = s->gain * am / d->pm - as / d->ps; /* >0 => mark */
+    int sign = stat > 0.0f;
+    int dcd = slicer_dcd(s);
+
+    if (sign != s->last_sign) {
+        /* Window-averaged detector crosses zero half a bit after the true edge. */
+        float err = s->phase - (AFSK_SPB / 2.0f);
+        s->phase -= err * (dcd ? PLL_GAIN_LOCKED : PLL_GAIN_SEARCH);
+        s->last_sign = sign;
+        s->q_clock += fabsf(err) <= EDGE_WIN ? Q_INC : -Q_DEC;
+        if (s->q_clock < 0) s->q_clock = 0;
+        if (s->q_clock > Q_MAX) s->q_clock = Q_MAX;
+        if (s->q_clock >= Q_ON) s->clock_dcd = 1;
+        else if (s->q_clock <= Q_OFF) s->clock_dcd = 0;
+    }
+    s->phase += 1.0f;
+    if (s->phase < (float)AFSK_SPB) return;
+    s->phase -= (float)AFSK_SPB;
+    int tone = sign ? 0 : 1; /* 0 = mark */
+    int bit = (tone == s->prev_tone) ? 1 : 0;
+    s->prev_tone = tone;
+
+    /* remember how certain this bit's tone decision was, at the index the HDLC receiver will store it */
+    size_t at = s->hdlc.n;
+    if (at < HDLC_RAW_MAX) s->seg_conf[at] = fabsf(stat);
+
+    /* HDLC carrier detect */
+    s->ones_run = bit ? s->ones_run + 1 : 0;
+    if (s->ones_run >= 7) s->hdlc_dcd = 0; /* idle/abort: data never has more than 5 ones in a row */
+    if (s->bits_since_flag < (1 << 30)) s->bits_since_flag++;
+
+    int len = hdlc_rx_bit(&s->hdlc, bit, frame, sizeof frame);
+    if (s->hdlc.n == 0 && s->hdlc.pat == 0x7E) { /* a flag just closed a segment */
+        if (s->bits_since_flag == 8) s->hdlc_dcd = 1; /* two flags back to back: a preamble or frame gap */
+        s->bits_since_flag = 0;
+        if (len > 0) queue_frame(d, frame, len, 0);
+        else if (d->repair_on && s->hdlc.last_nb) try_repair(d, s, s->hdlc.last_nb);
+    }
+}
+
+void afsk_demod_process(afsk_demod_t *d, const int16_t *in, size_t n) {
     for (size_t i = 0; i < n; i++) {
-        float x = (float)s[i] * (1.0f / 32768.0f);
+        float x = (float)in[i] * (1.0f / 32768.0f);
         float y = x - d->xprev + 0.995f * d->yprev; /* DC blocker */
         d->xprev = x;
         d->yprev = y;
-        x = y;
 
-        d->lvl += (x * x - d->lvl) * (1.0f / 480.0f);
+        d->lvl += (y * y - d->lvl) * (1.0f / 480.0f); /* broadband level: carrier sense must still hear voice */
+
+        d->pfbuf[d->pfpos] = y;
+        d->pfbuf[d->pfpos + PF_TAPS] = y;
+        d->pfpos = d->pfpos + 1 == PF_TAPS ? 0 : d->pfpos + 1;
+        const float *w = &d->pfbuf[d->pfpos]; /* oldest .. newest; the filter is symmetric */
+        float acc = 0.0f;
+        for (int k = 0; k < PF_TAPS; k++) acc += g_pf[k] * w[k];
+        x = acc;
 
         int k = d->idx;
         int ko = k >= WIN ? k - WIN : k + PERIOD - WIN;
@@ -221,45 +326,8 @@ void afsk_demod_process(afsk_demod_t *d, const int16_t *s, size_t n) {
         float as = (float)sqrt(d->sc * d->sc + d->ss * d->ss);
         d->pm = fmaxf(fmaxf(am, d->pm * PEAK_DECAY), PEAK_FLOOR);
         d->ps = fmaxf(fmaxf(as, d->ps * PEAK_DECAY), PEAK_FLOOR);
-        float stat = am / d->pm - as / d->ps; /* >0 => mark */
-        int sign = stat > 0.0f;
-        int dcd = afsk_demod_dcd(d);
-
-        if (sign != d->last_sign) {
-            /* Window-averaged detector crosses zero half a bit after the true edge. */
-            float err = d->phase - (AFSK_SPB / 2.0f);
-            d->phase -= err * (dcd ? PLL_GAIN_LOCKED : PLL_GAIN_SEARCH);
-            d->last_sign = sign;
-            d->q_clock += fabsf(err) <= EDGE_WIN ? Q_INC : -Q_DEC;
-            if (d->q_clock < 0) d->q_clock = 0;
-            if (d->q_clock > Q_MAX) d->q_clock = Q_MAX;
-            if (d->q_clock >= Q_ON) d->clock_dcd = 1;
-            else if (d->q_clock <= Q_OFF) d->clock_dcd = 0;
-        }
-        d->phase += 1.0f;
-        if (d->phase >= (float)AFSK_SPB) {
-            d->phase -= (float)AFSK_SPB;
-            int tone = sign ? 0 : 1; /* 0 = mark */
-            int bit = (tone == d->prev_tone) ? 1 : 0;
-            d->prev_tone = tone;
-
-            /* remember how certain this bit's tone decision was, at the index the HDLC receiver will store it */
-            size_t at = d->hdlc.n;
-            if (at < HDLC_RAW_MAX) d->seg_conf[at] = fabsf(stat);
-
-            /* HDLC carrier detect */
-            d->ones_run = bit ? d->ones_run + 1 : 0;
-            if (d->ones_run >= 7) d->hdlc_dcd = 0; /* idle/abort: data never has more than 5 ones in a row */
-            if (d->bits_since_flag < (1 << 30)) d->bits_since_flag++;
-
-            int len = hdlc_rx_bit(&d->hdlc, bit, frame, sizeof frame);
-            if (d->hdlc.n == 0 && d->hdlc.pat == 0x7E) { /* a flag just closed a segment */
-                if (d->bits_since_flag == 8) d->hdlc_dcd = 1; /* two flags back to back: a preamble or frame gap */
-                d->bits_since_flag = 0;
-                if (len > 0) queue_frame(d, frame, len, 0);
-                else if (d->repair_on && d->hdlc.last_nb) try_repair(d, d->hdlc.last_nb);
-            }
-        }
+        d->t++;
+        for (int s = 0; s < NSLICERS; s++) slice(d, &d->sl[s], am, as);
     }
 }
 
