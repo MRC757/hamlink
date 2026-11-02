@@ -25,7 +25,7 @@ from scipy.signal import resample_poly
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DLL = os.path.join(ROOT, "windows", "native", "hamlink_core.dll")
-API_VERSION = 8
+API_VERSION = 10
 CHUNK = 960  # 20 ms at 48 kHz
 
 MSG_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_char_p, C.c_char_p, C.c_int, C.c_void_p, C.c_int)
