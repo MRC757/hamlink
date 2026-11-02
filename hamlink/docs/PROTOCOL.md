@@ -110,6 +110,29 @@ share that fixed part, ACK timeout 12 s (60 s with manual PTT). Carrier sense co
 fldigi tuned to MT63-2000L at 1500 Hz decodes the characters but shows HamLink frames as gibberish; plain text typed in
 fldigi is ignored by HamLink. All stations must use the same modem.
 
+## PSK 2400 / PSK 3600 modem options (audio link)
+HamLink's own single-carrier PSK (`core/psk.c`): 1200 symbols/s on a 1700 Hz carrier, root-raised-cosine pulses with
+roll-off 0.3 (about 920-2480 Hz), **QPSK = 2400 bit/s** or **8-PSK = 3600 bit/s** on the air. QPSK points at 45+90k
+degrees, 8-PSK at 45k degrees, both Gray coded, bits taken least significant first.
+
+A burst: a BPSK preamble repeating the 31-symbol m-sequence of x^5+x^3+1 (the PTT lead-in, at least 120 symbols), then
+for each frame
+* sync: the 63-symbol BPSK m-sequence of x^6+x^5+1;
+* header: 3 bytes `[len][rate: 1 QPSK, 2 8-PSK][len ^ rate ^ 0x5A]`, 24 bits, each sent twice as BPSK (48 symbols);
+* data: the bytes `[len][frame][CRC-16 over len and frame]` plus 16 Reed-Solomon check bytes (the FX.25 code: GF(256),
+  0x11d, roots alpha^1..alpha^16, shortened; corrects 8 bad bytes), scrambled with x^9+x^5+1 (seed 0x1FF, restarted per
+  frame), in QPSK or 8-PSK symbols, with 8 known BPSK pilot symbols (the first 8 of the x^4+x^3+1 m-sequence) after
+  every 64 data symbols;
+
+then a 32-symbol tail. The receiver recovers symbol timing with a Gardner loop, finds each sync word by correlation,
+trains a 14-tap half-symbol-spaced equaliser on it by least squares, then tracks with LMS on pilots and decisions plus a
+phase loop. It reads the rate from the header, so PSK 2400 and PSK 3600 stations hear each other.
+
+Frames up to 236 bytes; HamLink uses the large fragment class (145 bytes) on PSK. Airtime estimates: 2130 / 3200 bit/s
+plus 164 / 141 ms per frame. Measured end to end over the simulated handheld audio path (300-3000 Hz, 6 dB treble loss,
++200 ppm): a 1000-byte acknowledged message took 8.0 s on PSK 2400 and 6.4 s on PSK 3600, against 15.2 s on AFSK with
+FX.25; PSK 2400 delivered everything down to 6 dB SNR (like AFSK with FX.25), PSK 3600 down to 10 dB.
+
 ## KISS TNC link
 Each mesh frame is one AX.25 UI frame: destination `HAMLNK`, source = sender callsign (first 6 chars, SSID
 digits honoured), control `0x03`, PID `0xF0`, info = mesh frame. It is sent as one KISS data frame (port 0,

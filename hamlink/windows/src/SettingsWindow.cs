@@ -17,6 +17,8 @@ internal sealed class SettingsWindow : Window
     const string ModemAfskText = "AFSK 1200 baud";
     const string ModemOfdmText = "OFDM (COFDMTV, as in Rattlegram)";
     const string ModemMt63Text = "MT63-2000: slow but robust";
+    const string ModemPsk2400Text = "PSK 2400 (QPSK): about twice as fast as AFSK";
+    const string ModemPsk3600Text = "PSK 3600 (8-PSK): fastest, needs a strong signal";
 
     readonly Settings s;
     readonly TextBox call = new() { MaxLength = 8, CharacterCasing = CharacterCasing.Upper };
@@ -89,8 +91,8 @@ internal sealed class SettingsWindow : Window
         fec.SelectedIndex = Math.Max(0, Array.FindIndex(FecChoices, f => f.Bytes == s.AfskFec));
         link.Items.Add(LinkAudioText); link.Items.Add(LinkTncText);
         link.SelectedIndex = s.Transport == "tnc" ? 1 : 0;
-        modem.Items.Add(ModemAfskText); modem.Items.Add(ModemOfdmText); modem.Items.Add(ModemMt63Text);
-        modem.SelectedIndex = s.Modem is 1 or 2 ? s.Modem : 0;
+        foreach (var t in new[] { ModemAfskText, ModemOfdmText, ModemMt63Text, ModemPsk2400Text, ModemPsk3600Text }) modem.Items.Add(t);
+        modem.SelectedIndex = s.Modem is >= 0 and <= 4 ? s.Modem : 0; // list order = modem number
         tncBaud.Items.Add("1200"); tncBaud.Items.Add("9600");
         tncBaud.SelectedIndex = s.TncBaud >= 9600 ? 1 : 0;
 
@@ -191,6 +193,10 @@ internal sealed class SettingsWindow : Window
             2 => "MT63-2000 is slow but robust: about 7 times the airtime of AFSK (a short message takes ~10 s, every " +
                  "transmission adds ~5 s), but in simulation it decoded at -4 dB SNR, where AFSK needs about +6 dB. " +
                  "For weak, noisy or fading paths. Occupies 500-2500 Hz; fldigi can tune it in but shows the data as gibberish.",
+            3 => "PSK 2400 (QPSK, 1200 baud at 1700 Hz): about twice the throughput of AFSK, and in simulation about as robust " +
+                 "(reliable down to ~6 dB SNR). Each frame carries Reed-Solomon error correction. PSK 2400 and 3600 stations hear each other.",
+            4 => "PSK 3600 (8-PSK): the fastest choice, about 2.4 times the throughput of AFSK, but it needs a strong, clean " +
+                 "signal (in simulation, reliable only above ~10 dB SNR). Drop to PSK 2400 if messages need retries.",
             _ => "AFSK 1200: simple, and interoperable with packet-radio tools.",
         };
     }
@@ -235,7 +241,7 @@ internal sealed class SettingsWindow : Window
             return;
         }
         s.Transport = link.SelectedIndex == 1 ? "tnc" : "audio";
-        s.Modem = modem.SelectedIndex is 1 or 2 ? modem.SelectedIndex : 0;
+        s.Modem = modem.SelectedIndex is >= 0 and <= 4 ? modem.SelectedIndex : 0;
         s.TncPort = Pick(tncPort, AutoPort);
         s.TncBaud = tncBaud.SelectedIndex == 1 ? 9600 : 1200;
         s.RadioInput = Pick(radioIn, Auto) == RadioDefault ? Devices.DefaultName : Pick(radioIn, Auto);

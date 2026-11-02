@@ -12,7 +12,7 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
 * Two ways to reach the radio: **audio + PTT** (a DigiRig or sound card, works with any FM handheld) or a
   **KISS TNC over Bluetooth/serial** (radios with a built-in TNC, e.g. BTECH UV-PRO / Vero VR-N76, or a
   Bluetooth KISS TNC). In TNC mode the radio does the modulation, keying and carrier sense.
-* Three modems on the audio link, chosen in Settings (every station on a channel must use the same one):
+* Five modems on the audio link, chosen in Settings (every station on a channel must use the same one). First three:
   **AFSK 1200 baud** (Bell 202 tones + HDLC; the default), **OFDM** (COFDMTV, the modem from the
   Rattlegram app) and **MT63-2000** (the fldigi mode, long interleave). Measured in simulation: OFDM decodes about
   **4-6 dB deeper into the noise** than AFSK (100% of packets at 8 dB SNR, where AFSK frames were 55%) but it is
@@ -21,6 +21,10 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   for AFSK, and every transmission spends ~5 s on receiver lock-in and interleaver flush, but it delivered 26-30 of 30
   messages from +6 down to -4 dB SNR, where AFSK with FX.25 delivered none below +6 dB. Choose AFSK for speed and
   packet-radio interoperability, OFDM or MT63 for weak or noisy paths, MT63 when getting through matters more than time.
+* Two more for speed: **PSK 2400** (QPSK) and **PSK 3600** (8-PSK), HamLink's own 1200-baud single-carrier PSK with an
+  adaptive equaliser and Reed-Solomon per frame (`docs/PROTOCOL.md`). Over a simulated handheld audio path a 1000-byte
+  acknowledged message took 8.0 s and 6.4 s, against 15.2 s on AFSK with FX.25. PSK 2400 was as robust as AFSK with
+  FX.25 (everything delivered down to 6 dB SNR); PSK 3600 needs about 10 dB. PSK 2400 and 3600 stations hear each other.
 * **FX.25 error correction on AFSK** (on by default, 16 Reed-Solomon check bytes; 32 or 64 or off in Settings): repairs up
   to 8/16/32 damaged bytes per frame, and stations without FX.25 still read frames that arrive intact. In simulated noise
   at 5-6 dB SNR it raised delivery from 8-64% to 75-99% with 16 check bytes, at about 25% more airtime per data frame.
@@ -196,6 +200,10 @@ FM audio channel or a simulated byte link):
   messages 2/2; 30/30 messages from +6 to -2 dB SNR and 26/30 at -4 dB, none at -6 dB. Selected and started in the
   Windows app. Not tested against fldigi on real audio, on a real radio, or on Android (the core supports it; the Android
   modem selector has not been extended).
+* PSK 2400 / 3600 (Windows, through the C API, over the handheld audio model: 300-3000 Hz, 0-12 dB treble loss, +-300 ppm
+  clock): every frame delivered at 12 dB and above in all combinations; acknowledged 1000-byte messages; a PSK 3600
+  sender heard by a PSK 2400 receiver; selected and started in the Windows app. Not tested on a real radio, whose FM
+  discriminator, limiter and squelch the model does not include, or on Android (the selector is not extended there).
 * Geodesy: Maidenhead encode/decode checked against exact rational arithmetic (9000 random points), UTM/MGRS against
   `pyproj` and the `mgrs` package (a handful of points on exact grid-line ties differ by one metre), NMEA checksums and fix rules.
 * Reports and map: bit-packed codec round trips, size limits, every error path, a 200,000-case fuzz run under

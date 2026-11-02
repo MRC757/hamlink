@@ -24,8 +24,10 @@ different API version, the app says so at start-up instead of failing later.
 
 ## Modems
 Pick the modem in Settings or with the buttons in the header (every station on the channel must use the same one):
-*AFSK 1200* (default, fastest, packet-radio compatible), *OFDM*, or *MT63-2000*, which is **slow but robust**: about 7
-times the airtime of AFSK, but it gets through far weaker and noisier signals. Details: `../docs/PROTOCOL.md`.
+*AFSK 1200* (default, packet-radio compatible), *OFDM*, *MT63-2000*, which is **slow but robust** (about 7 times the
+airtime of AFSK, but it gets through far weaker and noisier signals), *PSK 2400* (about twice as fast as AFSK, about as
+robust) or *PSK 3600* (fastest, about 2.4 times AFSK, needs a strong clean signal; PSK 2400 and 3600 stations hear each
+other). Details: `../docs/PROTOCOL.md`.
 
 ## Error correction (FX.25)
 Settings > *AFSK error correction*: FX.25 with 16 check bytes is the default; 32 or 64 repair more damage at the cost of

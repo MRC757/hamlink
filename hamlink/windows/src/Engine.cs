@@ -82,6 +82,8 @@ internal sealed class Engine
     {
         Radio.ModemOfdm => "OFDM (COFDMTV)",
         Radio.ModemMt63 => "MT63-2000 (slow but robust)",
+        Radio.ModemPsk2400 => "PSK 2400 (QPSK)",
+        Radio.ModemPsk3600 => "PSK 3600 (8-PSK)",
         _ => "AFSK 1200 baud",
     };
 
@@ -89,8 +91,14 @@ internal sealed class Engine
     string Summary(int modem)
     {
         string ptt = s.PttMode switch { "MANUAL" => "manual PTT (you key the radio)", "VOX" => "no PTT line (transmit immediately)", _ => $"PTT via {s.PttMode}" };
-        string mod = modem == Radio.ModemOfdm ? "OFDM" : modem == Radio.ModemMt63 ? "MT63-2000"
-                   : s.AfskFec > 0 ? $"AFSK 1200 + FX.25 ({s.AfskFec})" : "AFSK 1200";
+        string mod = modem switch
+        {
+            Radio.ModemOfdm => "OFDM",
+            Radio.ModemMt63 => "MT63-2000",
+            Radio.ModemPsk2400 => "PSK 2400",
+            Radio.ModemPsk3600 => "PSK 3600",
+            _ => s.AfskFec > 0 ? $"AFSK 1200 + FX.25 ({s.AfskFec})" : "AFSK 1200",
+        };
         return $"{audioKind} · {ptt} · {mod} · {(s.EffectiveCarrierSense switch { 0 => "carrier sense OFF", 1 => "carrier sense: data only", _ => "carrier sense on" })}";
     }
 

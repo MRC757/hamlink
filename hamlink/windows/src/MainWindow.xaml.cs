@@ -181,16 +181,19 @@ public partial class MainWindow : Window
 
     void SyncModemButtons()
     {
-        ModemAfskBtn.IsChecked = settings.Modem is not (1 or 2);
+        ModemAfskBtn.IsChecked = settings.Modem is not (1 or 2 or 3 or 4);
         ModemOfdmBtn.IsChecked = settings.Modem == 1;
         ModemMt63Btn.IsChecked = settings.Modem == 2;
+        ModemPsk2400Btn.IsChecked = settings.Modem == 3;
+        ModemPsk3600Btn.IsChecked = settings.Modem == 4;
         ModemPanel.Visibility = settings.Transport == "tnc" ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void OnModemChanged(object sender, RoutedEventArgs e)
     {
         if (loadingUi) return;
-        settings.Modem = ModemMt63Btn.IsChecked == true ? 2 : ModemOfdmBtn.IsChecked == true ? 1 : 0;
+        settings.Modem = ModemPsk3600Btn.IsChecked == true ? 4 : ModemPsk2400Btn.IsChecked == true ? 3
+                       : ModemMt63Btn.IsChecked == true ? 2 : ModemOfdmBtn.IsChecked == true ? 1 : 0;
         settings.Save();
         engine.SetModem(settings.Modem); // takes effect at once while running; otherwise at the next Start
     }

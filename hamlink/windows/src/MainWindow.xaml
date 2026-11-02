@@ -37,8 +37,12 @@
                 <TextBlock Text="Modem:" Margin="0,0,6,0" VerticalAlignment="Center" />
                 <RadioButton x:Name="ModemAfskBtn" Content="AFSK 1200" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged" />
                 <RadioButton x:Name="ModemOfdmBtn" Content="OFDM" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged" />
-                <RadioButton x:Name="ModemMt63Btn" Content="MT63-2000" GroupName="modem" Checked="OnModemChanged"
+                <RadioButton x:Name="ModemMt63Btn" Content="MT63-2000" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged"
                              ToolTip="MT63-2000: slow but robust. About 7x the airtime of AFSK, but decodes far weaker, noisier signals." />
+                <RadioButton x:Name="ModemPsk2400Btn" Content="PSK 2400" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged"
+                             ToolTip="PSK 2400 (QPSK): about twice the throughput of AFSK, about as robust." />
+                <RadioButton x:Name="ModemPsk3600Btn" Content="PSK 3600" GroupName="modem" Checked="OnModemChanged"
+                             ToolTip="PSK 3600 (8-PSK): fastest, about 2.4x AFSK, but needs a strong, clean signal." />
             </StackPanel>
             <CheckBox x:Name="RelayBox" DockPanel.Dock="Right" Content="Relay mode" VerticalAlignment="Center"
                       Margin="14,0,0,0" Checked="OnRelayChanged" Unchecked="OnRelayChanged" />

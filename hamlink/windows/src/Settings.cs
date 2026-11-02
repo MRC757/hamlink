@@ -40,7 +40,8 @@ internal sealed class Settings
     /// <summary>FX.25 error correction on transmitted AFSK frames: 0 off, or 16/32/64 Reed-Solomon check bytes. Receiving is always on.</summary>
     public int AfskFec { get; set; } = 16;
     public int EffectiveCarrierSense => CarrierSenseMode is >= 0 and <= 2 ? CarrierSenseMode : (CarrierSense ? 2 : 0);
-    /// <summary>0 = AFSK 1200 baud, 1 = OFDM (COFDMTV), 2 = MT63-2000. Every station on the channel must use the same one.</summary>
+    /// <summary>0 = AFSK 1200 baud, 1 = OFDM (COFDMTV), 2 = MT63-2000, 3 = PSK 2400, 4 = PSK 3600. Every station on the
+    /// channel must use the same one (PSK 2400 and 3600 stations hear each other).</summary>
     public int Modem { get; set; }
     /// <summary>"audio" = USB audio interface + PTT line; "tnc" = radio/TNC with KISS over a serial or paired-Bluetooth COM port.</summary>
     public string Transport { get; set; } = "audio";
@@ -99,7 +100,7 @@ internal sealed class Settings
         Callsign = Callsign.Trim().ToUpperInvariant();
         Dest = Dest.Trim().ToUpperInvariant();
         Ttl = Math.Clamp(Ttl, 0, 3);
-        Modem = Modem is 1 or 2 ? Modem : 0;
+        Modem = Modem is >= 0 and <= 4 ? Modem : 0;
         AfskFec = AfskFec is 0 or 16 or 32 or 64 ? AfskFec : 16;
         ManualCountdown = Math.Clamp(ManualCountdown, 2, 10);
         Transport = Transport == "tnc" ? "tnc" : "audio";

@@ -20,9 +20,10 @@ start a report there.
 ![HamLink map view](hamlink/docs/screenshots/windows-map.jpg)
 
 ## What it does
-* **Three modems on the audio link:** AFSK 1200 baud (Bell 202 + HDLC, the default); OFDM (COFDMTV, from Rattlegram),
-  which decodes about 4-6 dB deeper into the noise in simulation; and **MT63-2000, slow but robust**: about 7 times the
-  airtime of AFSK, but in simulation it still delivered at -4 dB SNR, where AFSK needs about +6 dB.
+* **Five modems on the audio link:** AFSK 1200 baud (Bell 202 + HDLC, the default); OFDM (COFDMTV, from Rattlegram);
+  **PSK 2400** and **PSK 3600** (QPSK / 8-PSK, about 2x and 2.4x the throughput of AFSK; 3600 needs a strong signal);
+  and **MT63-2000, slow but robust**: about 7 times the airtime of AFSK, but in simulation it still delivered at -4 dB
+  SNR, where AFSK needs about +6 dB.
 * **Reliable delivery:** acknowledgements and retries (selective-repeat ARQ), flood relay with duplicate suppression,
   carrier sense, automatic station ID.
 * **FX.25 error correction on AFSK**, on by default: repairs damaged bytes in each frame (up to 8, 16 or 32 depending on

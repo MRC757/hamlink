@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$ROOT/windows/native/hamlink_core.dll}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 INC=(-I"$ROOT/core" -I"$ROOT/third_party/codec2/src" -I"$ROOT/third_party/codec2/src/codec2" -I"$ROOT/third_party/aicodix")
-CSRC=("$ROOT"/core/{hamlink_api,voice,hdlc,afsk,fx25,mesh,tone,tnc,geo,nmea,report,mapmodel,schemas_gen}.c "$ROOT"/third_party/codec2/src/*.c)
+CSRC=("$ROOT"/core/{hamlink_api,voice,hdlc,afsk,fx25,psk,mesh,tone,tnc,geo,nmea,report,mapmodel,schemas_gen}.c "$ROOT"/third_party/codec2/src/*.c)
 
 if command -v x86_64-w64-mingw32-gcc >/dev/null; then
   CC=(x86_64-w64-mingw32-gcc); CXX=(x86_64-w64-mingw32-g++); LD=(x86_64-w64-mingw32-g++ -static-libgcc -static-libstdc++)

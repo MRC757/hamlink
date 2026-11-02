@@ -86,6 +86,7 @@ struct mesh {
     int fec_nroots; /* frames go out as FX.25 with this many check bytes (0 = plain HDLC); airtime estimates follow */
     uint32_t burst_extra_ms; /* fixed airtime every burst adds on top of preamble and frames (MT63 lock-in and flush) */
     uint32_t burst_cap_ms;   /* overrides cfg.burst_cap_ms when nonzero */
+    uint32_t frame_extra_ms; /* fixed airtime per frame on top of its bytes (PSK: sync word, header, RS check bytes) */
     mesh_stats_t st;
 };
 
@@ -141,7 +142,7 @@ uint32_t mesh_airtime_ms(size_t frame_len, uint32_t bps) { return airtime_bps(fr
 /* Airtime of one frame as this station sends it: an FX.25 block (tag, data, check bytes, 2 flags) or plain HDLC. */
 static uint32_t frame_air(const mesh_t *m, size_t frame_len) {
     size_t fx = m->fec_nroots ? fx25_air_bytes(frame_len, m->fec_nroots) : 0;
-    if (!fx) return airtime_bps(frame_len, m->cfg.bps);
+    if (!fx) return airtime_bps(frame_len, m->cfg.bps) + m->frame_extra_ms;
     return (uint32_t)(((fx + 2) * 8 * 1000 + m->cfg.bps - 1) / m->cfg.bps);
 }
 
@@ -151,6 +152,8 @@ void mesh_set_burst(mesh_t *m, uint32_t extra_ms, uint32_t cap_ms) {
     m->burst_extra_ms = extra_ms;
     m->burst_cap_ms = cap_ms;
 }
+
+void mesh_set_frame_extra(mesh_t *m, uint32_t ms) { m->frame_extra_ms = ms; }
 
 /* How long to wait for the next fragment before sending a partial ACK. Fragments of one burst arrive about
  * one frame airtime apart (OFDM packets ~1.1 s, AFSK frames ~0.9 s; a TNC adds its own TX delay), so
