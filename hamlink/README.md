@@ -4,7 +4,7 @@ Text and voice-clip messaging over cheap handheld VHF/UHF FM radios (Baofeng UV-
 Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT. Includes a simplex store-and-forward relay
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
-> **Review build 0.1.2 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
+> **Review build 0.2.0 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
 > The **Windows app now compiles and runs on Windows 11** (see *Status* below). The Android app has **never been compiled or
 > run**, and **nothing has been tried on a real radio**. Build errors and crashes, with the exact error text, are the most
 > useful feedback at this stage.

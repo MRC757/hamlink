@@ -37,7 +37,7 @@ start a report there.
   de-emphasised traffic track and 1001 from the flat one, with no false frames from an hour of noise.
 
 ## Status
-Review build 0.1.2. **The Windows app builds and runs on Windows 11**; messages, the map and reports have been used on
+Review build 0.2.0. **The Windows app builds and runs on Windows 11**; messages, the map and reports have been used on
 one PC. **Not yet tested:** two stations exchanging messages, any real radio, and the Android app, which has never been
 compiled. Bug reports with the exact error text are the most useful feedback right now. Windows logs errors with stack
 traces to `%LOCALAPPDATA%\HamLink\error.log`.
