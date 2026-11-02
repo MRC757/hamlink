@@ -16,6 +16,7 @@ internal sealed class SettingsWindow : Window
     const string LinkTncText = "KISS TNC (paired Bluetooth radio or serial TNC)";
     const string ModemAfskText = "AFSK 1200 baud";
     const string ModemOfdmText = "OFDM (COFDMTV, as in Rattlegram)";
+    const string ModemMt63Text = "MT63-2000: slow but robust";
 
     readonly Settings s;
     readonly TextBox call = new() { MaxLength = 8, CharacterCasing = CharacterCasing.Upper };
@@ -88,8 +89,8 @@ internal sealed class SettingsWindow : Window
         fec.SelectedIndex = Math.Max(0, Array.FindIndex(FecChoices, f => f.Bytes == s.AfskFec));
         link.Items.Add(LinkAudioText); link.Items.Add(LinkTncText);
         link.SelectedIndex = s.Transport == "tnc" ? 1 : 0;
-        modem.Items.Add(ModemAfskText); modem.Items.Add(ModemOfdmText);
-        modem.SelectedIndex = s.Modem == 1 ? 1 : 0;
+        modem.Items.Add(ModemAfskText); modem.Items.Add(ModemOfdmText); modem.Items.Add(ModemMt63Text);
+        modem.SelectedIndex = s.Modem is 1 or 2 ? s.Modem : 0;
         tncBaud.Items.Add("1200"); tncBaud.Items.Add("9600");
         tncBaud.SelectedIndex = s.TncBaud >= 9600 ? 1 : 0;
 
@@ -183,10 +184,15 @@ internal sealed class SettingsWindow : Window
         bool tnc = link.SelectedIndex == 1;
         audioSection.Visibility = tnc ? Visibility.Collapsed : Visibility.Visible;
         tncSection.Visibility = tnc ? Visibility.Visible : Visibility.Collapsed;
-        modemHint.Text = modem.SelectedIndex == 1
-            ? "OFDM decodes about 4-6 dB deeper into the noise than AFSK in simulation, but is not faster: the lead-in " +
-              "symbols make it use more airtime on a clean link. Lower the PTT lead-in to about 200 ms to save time."
-            : "AFSK 1200: simple, and interoperable with packet-radio tools.";
+        modemHint.Text = modem.SelectedIndex switch
+        {
+            1 => "OFDM decodes about 4-6 dB deeper into the noise than AFSK in simulation, but is not faster: the lead-in " +
+                 "symbols make it use more airtime on a clean link. Lower the PTT lead-in to about 200 ms to save time.",
+            2 => "MT63-2000 is slow but robust: about 7 times the airtime of AFSK (a short message takes ~10 s, every " +
+                 "transmission adds ~5 s), but in simulation it decoded at -4 dB SNR, where AFSK needs about +6 dB. " +
+                 "For weak, noisy or fading paths. Occupies 500-2500 Hz; fldigi can tune it in but shows the data as gibberish.",
+            _ => "AFSK 1200: simple, and interoperable with packet-radio tools.",
+        };
     }
 
     static void Fill(ComboBox box, List<string> items, string defaultLabel, string current)
@@ -229,7 +235,7 @@ internal sealed class SettingsWindow : Window
             return;
         }
         s.Transport = link.SelectedIndex == 1 ? "tnc" : "audio";
-        s.Modem = modem.SelectedIndex == 1 ? 1 : 0;
+        s.Modem = modem.SelectedIndex is 1 or 2 ? modem.SelectedIndex : 0;
         s.TncPort = Pick(tncPort, AutoPort);
         s.TncBaud = tncBaud.SelectedIndex == 1 ? 9600 : 1200;
         s.RadioInput = Pick(radioIn, Auto) == RadioDefault ? Devices.DefaultName : Pick(radioIn, Auto);

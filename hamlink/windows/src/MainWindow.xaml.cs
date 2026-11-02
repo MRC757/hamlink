@@ -71,9 +71,7 @@ public partial class MainWindow : Window
         LogList.ItemsSource = log;
         DestBox.Text = settings.Dest;
         RelayBox.IsChecked = settings.Relay;
-        ModemAfskBtn.IsChecked = settings.Modem != 1;
-        ModemOfdmBtn.IsChecked = settings.Modem == 1;
-        ModemPanel.Visibility = settings.Transport == "tnc" ? Visibility.Collapsed : Visibility.Visible;
+        SyncModemButtons();
         loadingUi = false;
         Positions.Apply(settings);
         RefreshHeader();
@@ -171,13 +169,28 @@ public partial class MainWindow : Window
     void OnSettings(object sender, RoutedEventArgs e)
     {
         var dlg = new SettingsWindow(settings) { Owner = this };
-        if (dlg.ShowDialog() == true) { settings.Save(); RefreshHeader(); }
+        if (dlg.ShowDialog() == true)
+        {
+            settings.Save();
+            RefreshHeader();
+            loadingUi = true; // the modem may have changed in Settings: show it without re-applying it
+            SyncModemButtons();
+            loadingUi = false;
+        }
+    }
+
+    void SyncModemButtons()
+    {
+        ModemAfskBtn.IsChecked = settings.Modem is not (1 or 2);
+        ModemOfdmBtn.IsChecked = settings.Modem == 1;
+        ModemMt63Btn.IsChecked = settings.Modem == 2;
+        ModemPanel.Visibility = settings.Transport == "tnc" ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void OnModemChanged(object sender, RoutedEventArgs e)
     {
         if (loadingUi) return;
-        settings.Modem = ModemOfdmBtn.IsChecked == true ? 1 : 0;
+        settings.Modem = ModemMt63Btn.IsChecked == true ? 2 : ModemOfdmBtn.IsChecked == true ? 1 : 0;
         settings.Save();
         engine.SetModem(settings.Modem); // takes effect at once while running; otherwise at the next Start
     }

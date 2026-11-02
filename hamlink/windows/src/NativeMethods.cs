@@ -3,10 +3,10 @@ using System.Runtime.InteropServices;
 
 namespace HamLink;
 
-/// <summary>P/Invoke surface of hamlink_core.dll (core/hamlink_api.h). API version 8.</summary>
+/// <summary>P/Invoke surface of hamlink_core.dll (core/hamlink_api.h). API version 9.</summary>
 internal static class NativeMethods
 {
-    public const int ApiVersion = 8;
+    public const int ApiVersion = 9;
     const string Lib = "hamlink_core";
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -70,7 +70,7 @@ internal static class NativeMethods
     public static extern void hl_get_meter(IntPtr ctx, float[] out5);
 
     // ---- modem and link choice (API v3) ----
-    public const int ModemAfsk = 0, ModemOfdm = 1, LinkAudio = 0, LinkTnc = 1;
+    public const int ModemAfsk = 0, ModemOfdm = 1, ModemMt63 = 2, LinkAudio = 0, LinkTnc = 1;
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern int hl_set_modem(IntPtr ctx, int modem);

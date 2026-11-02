@@ -73,16 +73,24 @@ internal sealed class Engine
     {
         var r = radio; if (r == null || s.Transport == "tnc") return;
         int rc = r.SetModem(modem);
-        if (rc != 0 && modem == Radio.ModemOfdm) Log?.Invoke(LogKind.Error, "OFDM modem could not start; using AFSK 1200", -1, null);
-        else Log?.Invoke(LogKind.Event, "Modem: " + (modem == Radio.ModemOfdm ? "OFDM (COFDMTV)" : "AFSK 1200 baud"), -1, null);
+        if (rc != 0) Log?.Invoke(LogKind.Error, $"{ModemName(modem)} could not start; using AFSK 1200", -1, null);
+        else Log?.Invoke(LogKind.Event, "Modem: " + ModemName(modem), -1, null);
         Mode?.Invoke(Summary(rc != 0 ? Radio.ModemAfsk : modem));
     });
+
+    static string ModemName(int modem) => modem switch
+    {
+        Radio.ModemOfdm => "OFDM (COFDMTV)",
+        Radio.ModemMt63 => "MT63-2000 (slow but robust)",
+        _ => "AFSK 1200 baud",
+    };
 
     string audioKind = "";
     string Summary(int modem)
     {
         string ptt = s.PttMode switch { "MANUAL" => "manual PTT (you key the radio)", "VOX" => "no PTT line (transmit immediately)", _ => $"PTT via {s.PttMode}" };
-        string mod = modem == Radio.ModemOfdm ? "OFDM" : s.AfskFec > 0 ? $"AFSK 1200 + FX.25 ({s.AfskFec})" : "AFSK 1200";
+        string mod = modem == Radio.ModemOfdm ? "OFDM" : modem == Radio.ModemMt63 ? "MT63-2000"
+                   : s.AfskFec > 0 ? $"AFSK 1200 + FX.25 ({s.AfskFec})" : "AFSK 1200";
         return $"{audioKind} · {ptt} · {mod} · {(s.EffectiveCarrierSense switch { 0 => "carrier sense OFF", 1 => "carrier sense: data only", _ => "carrier sense on" })}";
     }
 
@@ -247,13 +255,17 @@ internal sealed class Engine
         r.Status += (id, st) => StatusChanged?.Invoke(id, st switch { 1 => "delivered", 2 => "sent", _ => "FAILED (no ACK)" });
         r.Event += t => Log?.Invoke(LogKind.Event, t, -1, null);
 
-        if (!tnc && s.Modem == Radio.ModemOfdm && r.SetModem(Radio.ModemOfdm) != 0)
-            Log?.Invoke(LogKind.Error, "OFDM modem could not start; using AFSK 1200", -1, null);
+        int startModem = s.Modem;
+        if (!tnc && startModem != Radio.ModemAfsk && r.SetModem(startModem) != 0)
+        {
+            Log?.Invoke(LogKind.Error, $"{ModemName(startModem)} could not start; using AFSK 1200", -1, null);
+            startModem = Radio.ModemAfsk;
+        }
         r.SetLink(tnc ? Radio.LinkTnc : Radio.LinkAudio, s.TncBaud);
         r.SetFec(s.AfskFec);
         AfterStart(r);
         if (tnc) { LoopTnc(r); return; }
-        Log?.Invoke(LogKind.Event, "Modem: " + (s.Modem == Radio.ModemOfdm ? "OFDM (COFDMTV)" : "AFSK 1200 baud"), -1, null);
+        Log?.Invoke(LogKind.Event, "Modem: " + ModemName(startModem), -1, null);
         bool manual = s.PttMode == "MANUAL";
         r.SetManualPtt(manual);
         float busyThr = s.BusyThreshold; // the carrier-sense mode decides whether level counts
@@ -277,7 +289,7 @@ internal sealed class Engine
         audioKind = inDev < 0 || outDev < 0 ? "Windows default speakers + mic (acoustic)"
             : Devices.LooksUsb(ins[inDev]) && Devices.LooksUsb(outs[outDev]) ? "USB audio interface"
             : "PC sound devices (no USB interface)";
-        Mode?.Invoke(Summary(s.Modem));
+        Mode?.Invoke(Summary(startModem));
         ManualState?.Invoke(manual, "", 0);
 
         WaveInEvent? cap = null;

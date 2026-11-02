@@ -93,6 +93,23 @@ never start valid UTF-8, so stock Rattlegram text messages are not mistaken for 
 In a burst only the first packet gets lead-in symbols and non-final packets keep just a 20 ms tail fade.
 All stations must use the same modem; an OFDM-mode station can still decode AFSK, not the other way round.
 
+## MT63-2000 modem option (audio link): slow but robust
+MT63-2000 with the long interleave ("MT63-2000L", as fldigi sends it; vendored fldigi code, see `third_party/mt63`):
+64 carriers from 500 to 2500 Hz (centre 1500 Hz), 20 symbols per second, one 7-bit character per symbol, Walsh-code FEC
+spread over 64 symbols. Processed at 8 kHz, resampled to and from the 48 kHz audio.
+
+A transmission is: the interleaver primed with 64 NUL characters (not sent, as fldigi does), NUL characters for the PTT
+lead-in plus 1.6 s so the receiver locks, the frames, 63 NUL characters to flush the interleaver, and the jam symbol.
+That fixed part costs about 5.4 s with the default 500 ms lead-in. Each mesh frame is sent as characters: `0x16 0x69`
+(sync), then the bytes `[len][frame][CRC-16 over len and frame, low byte first]` (CRC as in the HDLC link layer) packed
+7 bits per character, least significant bit first. Receivers find frames by the sync and keep them only if the CRC
+passes. A 96-byte data fragment takes about 7 s of characters, an ACK about 1.9 s.
+
+Mesh timing for MT63: airtime estimated at 140 bit/s plus the fixed part per burst, bursts up to 30 s so several frames
+share that fixed part, ACK timeout 12 s (60 s with manual PTT). Carrier sense counts the MT63 receiver's lock as data.
+fldigi tuned to MT63-2000L at 1500 Hz decodes the characters but shows HamLink frames as gibberish; plain text typed in
+fldigi is ignored by HamLink. All stations must use the same modem.
+
 ## KISS TNC link
 Each mesh frame is one AX.25 UI frame: destination `HAMLNK`, source = sender callsign (first 6 chars, SSID
 digits honoured), control `0x03`, PID `0xF0`, info = mesh frame. It is sent as one KISS data frame (port 0,

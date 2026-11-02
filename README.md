@@ -20,8 +20,9 @@ start a report there.
 ![HamLink map view](hamlink/docs/screenshots/windows-map.jpg)
 
 ## What it does
-* **Two modems on the audio link:** AFSK 1200 baud (Bell 202 + HDLC, the default) and OFDM (COFDMTV, from Rattlegram),
-  which decodes about 4-6 dB deeper into the noise in simulation.
+* **Three modems on the audio link:** AFSK 1200 baud (Bell 202 + HDLC, the default); OFDM (COFDMTV, from Rattlegram),
+  which decodes about 4-6 dB deeper into the noise in simulation; and **MT63-2000, slow but robust**: about 7 times the
+  airtime of AFSK, but in simulation it still delivered at -4 dB SNR, where AFSK needs about +6 dB.
 * **Reliable delivery:** acknowledgements and retries (selective-repeat ARQ), flood relay with duplicate suppression,
   carrier sense, automatic station ID.
 * **FX.25 error correction on AFSK**, on by default: repairs damaged bytes in each frame (up to 8, 16 or 32 depending on
@@ -74,4 +75,5 @@ with no radio to a DigiRig on the air.
 
 ## Licence
 GPL-3.0-or-later ([hamlink/LICENSE](hamlink/LICENSE)). Third-party components keep their own licences: Codec2
-(LGPL-2.1) and the aicodix Rattlegram modem (0BSD-style). Map data © OpenStreetMap contributors.
+(LGPL-2.1), the aicodix Rattlegram modem (0BSD-style) and the MT63 modem from fldigi (GPL-3.0-or-later). Map data ©
+OpenStreetMap contributors.

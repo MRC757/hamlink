@@ -80,10 +80,10 @@ internal sealed class Radio : IDisposable
     public void GetMeter(float[] out5) => NativeMethods.hl_get_meter(ctx, out5);
 
     // ---- modem and link choice ----
-    public const int ModemAfsk = NativeMethods.ModemAfsk, ModemOfdm = NativeMethods.ModemOfdm;
+    public const int ModemAfsk = NativeMethods.ModemAfsk, ModemOfdm = NativeMethods.ModemOfdm, ModemMt63 = NativeMethods.ModemMt63;
     public const int LinkAudio = NativeMethods.LinkAudio, LinkTnc = NativeMethods.LinkTnc;
 
-    /// <summary>0 on success, -1 if OFDM could not start (AFSK stays selected). All stations must use the same modem.</summary>
+    /// <summary>0 on success, -1 if OFDM or MT63 could not start (AFSK stays selected). All stations must use the same modem.</summary>
     public int SetModem(int modem) => NativeMethods.hl_set_modem(ctx, modem);
     public void SetLink(int link, int tncBaud) => NativeMethods.hl_set_link(ctx, link, tncBaud);
 

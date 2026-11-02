@@ -70,10 +70,13 @@ HL_API void HL_CALL hl_get_meter(hl_ctx *c, float *out5);
 /* ---- modem choice and TNC link (API v3) ---- */
 #define HL_MODEM_AFSK 0 /* 1200 baud Bell 202 AFSK + HDLC (default) */
 #define HL_MODEM_OFDM 1 /* COFDMTV (Rattlegram family): ~4-6 dB more sensitive in simulation, same raw speed */
+#define HL_MODEM_MT63 2 /* MT63-2000L (API v9): slow (20 characters/s, ~5 s overhead per transmission) but very robust:
+                         * decodes at -3 dB SNR in simulation, about 9 dB below AFSK */
 #define HL_LINK_AUDIO 0 /* sound card + PTT: hl_process_audio / hl_poll_tx */
 #define HL_LINK_TNC 1   /* radio with a built-in KISS TNC (Bluetooth SPP / serial): hl_tnc_rx / hl_tnc_poll_tx */
-/* Select the transmit modem for the audio link. Receive: AFSK is always decoded, OFDM too once selected.
- * All stations that must hear each other need the same modem. Returns 0, or -1 if OFDM could not start. */
+/* Select the transmit modem for the audio link. Receive: AFSK is always decoded, OFDM too once it has been selected, MT63
+ * while it is selected. All stations that must hear each other need the same modem. Returns 0, or -1 if OFDM or MT63
+ * could not start (AFSK stays selected). */
 HL_API int HL_CALL hl_set_modem(hl_ctx *c, int modem);
 /* Choose audio or TNC link. tnc_baud (1200 or 9600) is only used to estimate airtime for ACK timing. */
 HL_API void HL_CALL hl_set_link(hl_ctx *c, int link, int tnc_baud);

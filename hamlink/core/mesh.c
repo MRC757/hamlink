@@ -84,6 +84,8 @@ struct mesh {
     uint16_t next_id;
     uint8_t ack_serial;
     int fec_nroots; /* frames go out as FX.25 with this many check bytes (0 = plain HDLC); airtime estimates follow */
+    uint32_t burst_extra_ms; /* fixed airtime every burst adds on top of preamble and frames (MT63 lock-in and flush) */
+    uint32_t burst_cap_ms;   /* overrides cfg.burst_cap_ms when nonzero */
     mesh_stats_t st;
 };
 
@@ -133,7 +135,8 @@ static uint32_t airtime_bps(size_t frame_len, uint32_t bps) {
 }
 
 uint32_t mesh_frame_airtime_ms(size_t frame_len) { return airtime_bps(frame_len, BAUD); }
-uint32_t mesh_airtime_ms(size_t frame_len, uint32_t bps) { return airtime_bps(frame_len, bps < 300 ? BAUD : bps); }
+#define MIN_BPS 50 /* slowest airtime-estimate rate accepted (MT63-2000 is 140 bit/s); below it, 0 or garbage: use 1200 */
+uint32_t mesh_airtime_ms(size_t frame_len, uint32_t bps) { return airtime_bps(frame_len, bps < MIN_BPS ? BAUD : bps); }
 
 /* Airtime of one frame as this station sends it: an FX.25 block (tag, data, check bytes, 2 flags) or plain HDLC. */
 static uint32_t frame_air(const mesh_t *m, size_t frame_len) {
@@ -143,6 +146,11 @@ static uint32_t frame_air(const mesh_t *m, size_t frame_len) {
 }
 
 void mesh_set_fec(mesh_t *m, int nroots) { m->fec_nroots = nroots == 16 || nroots == 32 || nroots == 64 ? nroots : 0; }
+
+void mesh_set_burst(mesh_t *m, uint32_t extra_ms, uint32_t cap_ms) {
+    m->burst_extra_ms = extra_ms;
+    m->burst_cap_ms = cap_ms;
+}
 
 /* How long to wait for the next fragment before sending a partial ACK. Fragments of one burst arrive about
  * one frame airtime apart (OFDM packets ~1.1 s, AFSK frames ~0.9 s; a TNC adds its own TX delay), so
@@ -174,7 +182,7 @@ mesh_t *mesh_create(const mesh_cfg_t *cfg, const mesh_cb_t *cb, void *user, uint
     m->cfg = *cfg;
     if (m->cfg.max_retries > 14) m->cfg.max_retries = 14;
     if (!mesh_frag_size((int)m->cfg.frag_class)) m->cfg.frag_class = MESH_FRAG_CLASS_SMALL;
-    if (m->cfg.bps < 300) m->cfg.bps = BAUD;
+    if (m->cfg.bps < MIN_BPS) m->cfg.bps = BAUD;
     if (cb) m->cb = *cb;
     m->user = user;
     pack_call(m->me, cfg->callsign);
@@ -197,7 +205,7 @@ void mesh_set_relay(mesh_t *m, int enabled) { m->cfg.relay_enabled = enabled ? 1
 void mesh_configure(mesh_t *m, int frag_class, uint32_t ack_timeout_ms, uint32_t bps) {
     if (mesh_frag_size(frag_class)) m->cfg.frag_class = (uint32_t)frag_class;
     if (ack_timeout_ms >= 500) m->cfg.ack_timeout_ms = ack_timeout_ms;
-    if (bps >= 300) m->cfg.bps = bps;
+    if (bps >= MIN_BPS) m->cfg.bps = bps;
 }
 void mesh_get_stats(const mesh_t *m, mesh_stats_t *out) { *out = m->st; }
 
@@ -538,7 +546,11 @@ void mesh_rx_frame(mesh_t *m, const uint8_t *f, size_t len, uint64_t now) {
 /* ---------------- scheduling ---------------- */
 
 void mesh_set_channel_busy(mesh_t *m, int busy, uint64_t now) {
-    if (m->busy && !busy) m->holdoff_until = now + 80 + rnd(m) % 250;
+    if (m->busy && !busy) {
+        /* never shorten a longer hold-off, such as the window kept clear for an ACK we asked for */
+        uint64_t h = now + 80 + rnd(m) % 250;
+        if (h > m->holdoff_until) m->holdoff_until = h;
+    }
     m->busy = busy ? 1 : 0;
 }
 
@@ -591,7 +603,8 @@ static int cmp_eligible(const mesh_t *m, int a, int b) {
 int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens, int max_frames) {
     if (m->busy || now < m->holdoff_until) return 0;
     int pick[Q_SIZE], np = 0;
-    uint32_t total_ms = m->cfg.preamble_ms;
+    uint32_t total_ms = m->cfg.preamble_ms + m->burst_extra_ms;
+    uint32_t cap_ms = m->burst_cap_ms ? m->burst_cap_ms : m->cfg.burst_cap_ms;
     size_t bytes = 0;
     int full = 0;
 
@@ -608,7 +621,7 @@ int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens
             qent_t *e = &m->q[cand[c]];
             uint32_t ms = frame_air(m, e->len);
             if (np >= max_frames || bytes + e->len > cap ||
-                (np > 0 && total_ms + ms > m->cfg.burst_cap_ms)) { full = 1; break; }
+                (np > 0 && total_ms + ms > cap_ms)) { full = 1; break; }
             pick[np++] = cand[c];
             total_ms += ms;
             bytes += e->len;
@@ -654,7 +667,7 @@ int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens
      * say) goes out the moment our burst ends and collides with the ACK on a half-duplex channel: the broadcast is lost
      * and the acknowledged message needs a retry. Window = their ACK delay (40-120 ms) + their lead-in + the ACK frame. */
     if (expect_ack) {
-        uint64_t w = now + total_ms + m->cfg.preamble_ms + frame_air(m, MESH_HDR_LEN + 4) + 120 + 400;
+        uint64_t w = now + total_ms + m->cfg.preamble_ms + m->burst_extra_ms + frame_air(m, MESH_HDR_LEN + 4) + 120 + 400;
         if (w > m->holdoff_until) m->holdoff_until = w;
     }
     if (sent_non_id && !m->tx_since_id) {

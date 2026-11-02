@@ -5,6 +5,7 @@
 #include <string.h>
 #include "afsk.h"
 #include "mesh.h"
+#include "mt63.h"
 #include "geo.h"
 #include "mapmodel.h"
 #include "report.h"
@@ -14,7 +15,7 @@
 #include "tone.h"
 #include "voice.h"
 
-#define HL_API_VERSION 8
+#define HL_API_VERSION 9
 #define HL_FEC_DEFAULT 16
 
 #define REPEAT_SLOTS 8
@@ -40,6 +41,8 @@ struct hl_ctx {
     uint32_t tnc_baud;
     ofdm_tx_t *otx;
     ofdm_rx_t *orx;
+    mt63_tx_t *mtx;
+    mt63_rx_t *mrx;
     kiss_dec_t kiss;
     nmea_t nmea;
     map_model_t *map;
@@ -153,6 +156,8 @@ void HL_CALL hl_destroy(hl_ctx *c) {
     map_destroy(c->map);
     ofdm_tx_destroy(c->otx);
     ofdm_rx_destroy(c->orx);
+    mt63_tx_destroy(c->mtx);
+    mt63_rx_destroy(c->mrx);
     afsk_demod_destroy(c->demod);
     voice_destroy(c->voice);
     free(c->txaudio);
@@ -188,6 +193,7 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
         afsk_demod_process(c->demod, pcm, (size_t)n);
         meter_feed(&c->meter, pcm, (size_t)n);
         if (c->orx) ofdm_rx_process(c->orx, pcm, (size_t)n);
+        if (c->mrx && c->modem == HL_MODEM_MT63) mt63_rx_process(c->mrx, pcm, (size_t)n);
     }
     uint8_t frame[HDLC_MAX_FRAME];
     int len, repaired;
@@ -206,13 +212,19 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
             for (int i = 0; i < nf; i++) mesh_rx_frame(c->mesh, fr[i], fl[i], (uint64_t)now_ms);
         }
     }
+    if (c->mrx && c->modem == HL_MODEM_MT63) {
+        uint8_t mf[MT63_MAX_FRAME];
+        int ml;
+        while ((ml = mt63_rx_next(c->mrx, mf, sizeof mf)) > 0) mesh_rx_frame(c->mesh, mf, (size_t)ml, (uint64_t)now_ms);
+    }
     float level = afsk_demod_level(c->demod);
-    /* Data carrier detect sees AFSK only. With the OFDM modem selected, "data only" still uses the level so that OFDM
-     * transmissions (which the AFSK detector cannot recognise) hold us off. */
-    int data = afsk_demod_dcd(c->demod);
+    /* Data carrier detect: AFSK flags/clock, or the MT63 receiver's lock. With OFDM or MT63 selected, "data only" still
+     * uses the level too, so their transmissions hold us off even before (or without) a lock. */
+    int mt63 = c->modem == HL_MODEM_MT63;
+    int data = afsk_demod_dcd(c->demod) || (mt63 && c->mrx && mt63_rx_locked(c->mrx));
     int loud = level > busy_threshold;
     c->busy = c->carrier_mode == HL_CS_OFF ? 0
-            : c->carrier_mode == HL_CS_DATA ? (data || (c->modem == HL_MODEM_OFDM && loud))
+            : c->carrier_mode == HL_CS_DATA ? (data || ((c->modem == HL_MODEM_OFDM || mt63) && loud))
             : (data || loud);
     mesh_set_channel_busy(c->mesh, c->busy, (uint64_t)now_ms);
     mesh_tick(c->mesh, (uint64_t)now_ms);
@@ -244,6 +256,7 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
     if (noise < 1) noise = 1;
     if (noise > 6) noise = 6;
     size_t cap = c->modem == HL_MODEM_OFDM && c->otx ? ofdm_burst_max_samples(c->txlens, n, noise)
+               : c->modem == HL_MODEM_MT63 && c->mtx ? mt63_burst_max_samples(c->txlens, n, c->preamble_ms)
                                                      : modem_burst_max_samples_fec(c->txlens, n, c->preamble_ms, 2, c->fec);
     if (cap == 0) return NULL;
     if (cap > c->txcap) {
@@ -258,6 +271,8 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
     if (c->modem == HL_MODEM_OFDM && c->otx) {
         k = ofdm_encode_burst(c->otx, frames, c->txlens, n, c->callsign, noise, c->txaudio, c->txcap);
         for (size_t i = 0; i < k; i++) c->txaudio[i] = (int16_t)((float)c->txaudio[i] * amp);
+    } else if (c->modem == HL_MODEM_MT63 && c->mtx) {
+        k = mt63_encode_burst(c->mtx, frames, c->txlens, n, c->preamble_ms, amp, c->txaudio, c->txcap);
     } else {
         k = modem_encode_burst_fec(frames, c->txlens, n, c->preamble_ms, 2, amp, c->fec, c->txaudio, c->txcap);
     }
@@ -311,9 +326,17 @@ static void apply_timing(hl_ctx *c) {
     /* FX.25 wraps only what this station modulates itself: AFSK on the audio link (OFDM has its own FEC; a TNC radio
      * modulates its own frames) */
     mesh_set_fec(c->mesh, c->link == HL_LINK_AUDIO && c->modem == HL_MODEM_AFSK ? c->fec : 0);
+    mesh_set_burst(c->mesh, 0, 0);
     if (c->link == HL_LINK_TNC) {
         /* the radio keys up, runs CSMA and queues frames by itself, so allow plenty of time for an ACK */
         mesh_configure(c->mesh, MESH_FRAG_CLASS_SMALL, c->tnc_baud >= 9600 ? 3500 : 5500, c->tnc_baud);
+        return;
+    }
+    if (c->modem == HL_MODEM_MT63) {
+        /* 20 seven-bit characters per second; every transmission also spends ~5 s on receiver lock-in and the interleaver
+         * flush, so let several frames share it (up to 30 s per burst) and wait for an ACK burst that itself takes ~8 s. */
+        mesh_set_burst(c->mesh, mt63_burst_overhead_ms(c->preamble_ms) - (uint32_t)c->preamble_ms, 30000);
+        mesh_configure(c->mesh, MESH_FRAG_CLASS_SMALL, c->manual ? 60000u : 12000u, MT63_CHARS_PER_S * 7);
         return;
     }
     int ofdm = c->modem == HL_MODEM_OFDM;
@@ -343,6 +366,16 @@ int HL_CALL hl_set_modem(hl_ctx *c, int modem) {
             return -1;
         }
         c->modem = HL_MODEM_OFDM;
+    } else if (modem == HL_MODEM_MT63) {
+        if (!c->mtx) c->mtx = mt63_tx_create();
+        if (!c->mrx) c->mrx = mt63_rx_create();
+        if (!c->mtx || !c->mrx) {
+            mt63_tx_destroy(c->mtx); mt63_rx_destroy(c->mrx);
+            c->mtx = NULL; c->mrx = NULL; c->modem = HL_MODEM_AFSK;
+            apply_timing(c);
+            return -1;
+        }
+        c->modem = HL_MODEM_MT63;
     } else {
         c->modem = HL_MODEM_AFSK;
     }

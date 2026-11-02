@@ -36,7 +36,9 @@
  <StackPanel x:Name="ModemPanel" DockPanel.Dock="Right" Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Modem:" Margin="0,0,6,0" VerticalAlignment="Center" />
                 <RadioButton x:Name="ModemAfskBtn" Content="AFSK 1200" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged" />
-                <RadioButton x:Name="ModemOfdmBtn" Content="OFDM" GroupName="modem" Checked="OnModemChanged" />
+                <RadioButton x:Name="ModemOfdmBtn" Content="OFDM" GroupName="modem" Margin="0,0,8,0" Checked="OnModemChanged" />
+                <RadioButton x:Name="ModemMt63Btn" Content="MT63-2000" GroupName="modem" Checked="OnModemChanged"
+                             ToolTip="MT63-2000: slow but robust. About 7x the airtime of AFSK, but decodes far weaker, noisier signals." />
             </StackPanel>
             <CheckBox x:Name="RelayBox" DockPanel.Dock="Right" Content="Relay mode" VerticalAlignment="Center"
                       Margin="14,0,0,0" Checked="OnRelayChanged" Unchecked="OnRelayChanged" />

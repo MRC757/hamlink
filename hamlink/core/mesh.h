@@ -54,6 +54,9 @@ void mesh_configure(mesh_t *m, int frag_class, uint32_t ack_timeout_ms, uint32_t
 /* Frames will go out as FX.25 with nroots (16, 32, 64) check bytes, or plain HDLC (0, the default): airtime estimates
  * for burst packing and ACK timing follow. */
 void mesh_set_fec(mesh_t *m, int nroots);
+/* Modems with a fixed per-transmission cost (MT63: receiver lock-in and interleaver flush) add extra_ms to every burst's
+ * airtime estimate; cap_ms (nonzero) replaces the configured burst length cap so several frames can share that cost. */
+void mesh_set_burst(mesh_t *m, uint32_t extra_ms, uint32_t cap_ms);
 /* Payload bytes per fragment for a class, 0 if unknown. */
 int mesh_frag_size(int frag_class);
 

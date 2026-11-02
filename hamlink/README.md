@@ -12,12 +12,15 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
 * Two ways to reach the radio: **audio + PTT** (a DigiRig or sound card, works with any FM handheld) or a
   **KISS TNC over Bluetooth/serial** (radios with a built-in TNC, e.g. BTECH UV-PRO / Vero VR-N76, or a
   Bluetooth KISS TNC). In TNC mode the radio does the modulation, keying and carrier sense.
-* Two modems on the audio link, chosen in Settings (every station on a channel must use the same one):
-  **AFSK 1200 baud** (Bell 202 tones + HDLC; the default) and **OFDM** (COFDMTV, the modem from the
-  Rattlegram app). Measured in simulation: OFDM decodes about **4-6 dB deeper into the noise** than AFSK
-  (100% of packets at 8 dB SNR, where AFSK frames were 55%) but it is **not faster**: on a clean link it used
-  about 20% more airtime than AFSK for the same message, because every ACK burst carries OFDM lead-in symbols.
-  Choose OFDM for weak or noisy paths, AFSK for speed and packet-radio interoperability.
+* Three modems on the audio link, chosen in Settings (every station on a channel must use the same one):
+  **AFSK 1200 baud** (Bell 202 tones + HDLC; the default), **OFDM** (COFDMTV, the modem from the
+  Rattlegram app) and **MT63-2000** (the fldigi mode, long interleave). Measured in simulation: OFDM decodes about
+  **4-6 dB deeper into the noise** than AFSK (100% of packets at 8 dB SNR, where AFSK frames were 55%) but it is
+  **not faster**: on a clean link it used about 20% more airtime than AFSK for the same message, because every ACK burst
+  carries OFDM lead-in symbols. **MT63-2000 is slow but robust**: a short message took 10.5 s on the air against 1.5 s
+  for AFSK, and every transmission spends ~5 s on receiver lock-in and interleaver flush, but it delivered 26-30 of 30
+  messages from +6 down to -4 dB SNR, where AFSK with FX.25 delivered none below +6 dB. Choose AFSK for speed and
+  packet-radio interoperability, OFDM or MT63 for weak or noisy paths, MT63 when getting through matters more than time.
 * **FX.25 error correction on AFSK** (on by default, 16 Reed-Solomon check bytes; 32 or 64 or off in Settings): repairs up
   to 8/16/32 damaged bytes per frame, and stations without FX.25 still read frames that arrive intact. In simulated noise
   at 5-6 dB SNR it raised delivery from 8-64% to 75-99% with 16 check bytes, at about 25% more airtime per data frame.
@@ -69,6 +72,7 @@ core/            portable C/C++: afsk.c hdlc.c (AFSK modem) ofdm.cpp (COFDMTV wr
                  tnc.c (KISS + AX.25 UI) voice.c (Codec2) tone.c (test tone + RX meter) hamlink_api.c (flat API)
 third_party/codec2  trimmed Codec2 (LGPL-2.1), pre-generated codebooks, no host tools needed
 third_party/aicodix vendored Rattlegram COFDMTV modem (permissive 0BSD-style license), one small patch
+third_party/mt63    vendored fldigi MT63 modem (GPL-3.0-or-later), initialisation fixes listed in its README
 android/         Kotlin + Compose app, JNI bridge, foreground service, DigiRig PTT over USB serial,
                  map (MapView.kt, Tiles.kt), position sources (Positions.kt), schema-driven report form
 windows/         C# .NET 8 WPF app, P/Invoke to hamlink_core.dll (core/hamlink_api.c), NAudio audio,
@@ -188,6 +192,10 @@ FM audio channel or a simulated byte link):
 * FX.25 (Windows, through the C API): Reed-Solomon output identical to an independent implementation, corrections and
   refusals checked on 3,000 blocks, backward compatibility with the previous release, acknowledged messages, and delivery
   in simulated noise (`docs/DSP_IMPROVEMENTS.md` step 5). Not tested against Dire Wolf or UZ7HO, or on a real radio.
+* MT63-2000 (Windows, through the C API, white noise): broadcasts 10/10 on a clean channel; acknowledged two-fragment
+  messages 2/2; 30/30 messages from +6 to -2 dB SNR and 26/30 at -4 dB, none at -6 dB. Selected and started in the
+  Windows app. Not tested against fldigi on real audio, on a real radio, or on Android (the core supports it; the Android
+  modem selector has not been extended).
 * Geodesy: Maidenhead encode/decode checked against exact rational arithmetic (9000 random points), UTM/MGRS against
   `pyproj` and the `mgrs` package (a handful of points on exact grid-line ties differ by one metre), NMEA checksums and fix rules.
 * Reports and map: bit-packed codec round trips, size limits, every error path, a 200,000-case fuzz run under
@@ -248,5 +256,6 @@ must make the corresponding source available under the same licence. Source file
 `SPDX-License-Identifier: GPL-3.0-or-later`.
 
 Third-party components keep their own licences, all compatible with GPL-3.0: Codec2 (LGPL-2.1, `third_party/codec2`),
-the aicodix Rattlegram modem (0BSD-style, `third_party/aicodix`), and at build time NAudio and usb-serial-for-android (MIT),
+the aicodix Rattlegram modem (0BSD-style, `third_party/aicodix`), the MT63 modem from fldigi by Pawel Jalocha SP9VRC and
+Dave Freese W1HKJ (GPL-3.0-or-later, `third_party/mt63`), and at build time NAudio and usb-serial-for-android (MIT),
 System.IO.Ports and .NET (MIT), and AndroidX/Compose (Apache-2.0).
