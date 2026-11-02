@@ -22,6 +22,8 @@ object Hub {
         val time: Long = System.currentTimeMillis(),
     )
 
+    /** Settings.theme, mirrored here so a change in the Settings dialog recolours the app at once. */
+    var theme by mutableStateOf(THEME_SYSTEM)
     var phase by mutableStateOf(Phase.OFF)
     var level by mutableStateOf(0f)
     var audioRoute by mutableStateOf("")

@@ -23,8 +23,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- usesCleartextTraffic: map tiles from a tile server on the local network (http://192.168.x.x...). The only HTTP
+         client is Tiles.kt, and TileUrls.problem() refuses plain http to anything but local addresses. -->
     <application
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:label="HamLink"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 

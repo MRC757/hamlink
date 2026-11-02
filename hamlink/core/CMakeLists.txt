@@ -43,7 +43,7 @@ if(TARGET codec2_lite)
   set_target_properties(hamlink_mt63 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
   # Flat C API (hamlink_api.h): used by the Windows app (P/Invoke), the Android JNI layer and the tests.
-  set(HL_API_SRCS hamlink_api.c voice.c hdlc.c afsk.c fx25.c psk.c mesh.c tone.c tnc.c geo.c nmea.c report.c mapmodel.c schemas_gen.c)
+  set(HL_API_SRCS hamlink_api.c audiocheck.c voice.c hdlc.c afsk.c fx25.c psk.c mesh.c tone.c tnc.c geo.c nmea.c report.c mapmodel.c schemas_gen.c)
   add_library(hamlink_api_static STATIC ${HL_API_SRCS})
   target_include_directories(hamlink_api_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(hamlink_api_static PUBLIC hamlink_ofdm hamlink_mt63 codec2_lite)

@@ -73,6 +73,8 @@ internal sealed class Settings
     /// <summary>Off = use only tiles already on disk (air-gapped use).</summary>
     public bool TileOnline { get; set; } = true;
     public int TileCacheMb { get; set; } = 300;
+    /// <summary>Offline map pack (raster MBTiles) used before the tile server; "" = none.</summary>
+    public string MapPackPath { get; set; } = "";
 
     public bool CallsignValid => Regex.IsMatch(Callsign, "^[A-Z0-9/-]{3,8}$") && Callsign != "CQ";
 

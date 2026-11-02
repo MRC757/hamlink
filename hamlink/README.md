@@ -4,9 +4,11 @@ Text and voice-clip messaging over cheap handheld VHF/UHF FM radios (Baofeng UV-
 Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT. Includes a simplex store-and-forward relay
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
-> **Review build 0.2.1 (2026-11-02).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
+> **Review build 0.2.2 (2026-11-02).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
 > The **Windows app runs on Windows 11** and the **Android app runs on a phone**; the two have exchanged messages, reports
-> and relayed traffic by acoustic coupling (phone held near the laptop, no radio). Nothing has been tried on a real radio yet.
+> and relayed traffic by acoustic coupling, and MT63 messages over **Baofeng radios** (phone to laptop). The radio test
+> used a noise-cancelling USB-C cable that only MT63 survives; AFSK, PSK and OFDM over radio still need testing with a
+> DigiRig or plain sound card.
 > Downloads for both are on the [Releases](https://github.com/MRC757/hamlink/releases) page. Crashes and errors, with the
 > exact error text, are the most useful feedback at this stage.
 
@@ -36,7 +38,9 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   about 12 s round trip through one relay.
 * **Position reports and SALUTE situation reports on an OpenStreetMap-style map**: positions from device GPS, typed
   lat/lon or a Maidenhead grid square; icons change colour with the reporter's assessment and fade as they age;
-  map tiles are cached on the device. Report types are data (`schemas/*.json`), so adding one is a JSON file.
+  map tiles are cached on the device. **Offline map files** (raster MBTiles) work with no internet;
+  `tools/make_mbtiles.py` builds one for your area from USGS topo maps or your own tile server (`docs/OFFLINE_MAPS.md`).
+  Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
   On Windows, right-click a point on the map to start a report at that location.
 * **Station SITREP**: an eight-field drop-down status report about your own station and area (conditions, home/
@@ -235,6 +239,15 @@ A room model (`speaker -> echoes -> mic`, all five modems) reproduces this: ever
 about 10 cm of the speaker or through a cable, but room echo defeats AFSK and PSK beyond about 30 cm while MT63 still
 works at 1 m. So use an audio cable (DigiRig) for AFSK and PSK; acoustic coupling is only a quick check.
 
+On-air by radio (2026-11-02, Baofeng handhelds; BTECH USB-C audio cables with radio VOX on the phone and on the laptop):
+the phone's transmissions were clean, but the laptop received nothing until the receive path was diagnosed from recordings
+(`tools/replay_wav.py` and the *Record received radio audio* option). Three faults were found: Windows audio processing
+on the cable (now bypassed by raw WASAPI capture), the Windows microphone level at 100 overloading the cable's input
+(about 50-60 is right), and **noise cancelling built into the cable's USB chip**, which cuts every steady signal by about
+20 dB after its first 0.7 s and cannot be switched off. With the radio volume in a middle range MT63 decoded all three
+test messages (at full volume the cable's input clipped and nothing decoded); AFSK, PSK and OFDM did not decode at any
+volume through that cable. The core now detects that last fault and warns in the log; Help explains the fixes.
+
 **Not verified**: on Android, USB audio and the USB-serial PTT line, the Bluetooth TNC link, voice clips; on Windows,
 the location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips, Test / Calibrate, KISS
 TNC mode; the apps' audio, Bluetooth
@@ -256,8 +269,9 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
    copies. Each copy is a transmission.
 3. **Clock dependence.** Report times and icon ageing use each device's clock. A station with a wrong clock shows
    reports as too old or too new. Air-gapped PCs are the likely case.
-4. **Maps offline.** Only tiles you have viewed are cached. OpenStreetMap's servers forbid bulk downloading, so there is
-   no "download this area". Offline map packs (MBTiles/PMTiles) are designed for (`docs/EXTENDING.md`) but not written.
+4. **Maps offline.** Offline map files must be raster MBTiles built in advance (`docs/OFFLINE_MAPS.md`); vector
+   files (PMTiles, vector MBTiles) are refused, and there is no in-app "download this area" because OpenStreetMap's
+   servers forbid bulk downloading.
 5. **Android tile settings.** After changing the tile server URL in Map setup, switch tabs once so the new source is used.
 6. **Hostile/Suspect is the reporter's choice**, sent to everyone in range with no confirmation step.
 7. **Windows location service** fixes worse than 150 m are refused (Wi-Fi/IP positioning), so a PC without a GPS receiver

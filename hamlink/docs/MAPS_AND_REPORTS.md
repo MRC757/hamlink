@@ -34,8 +34,10 @@ manual-PTT mode each copy waits for you to press Transmit, like any other frame.
 * **Station icons**: one per callsign that sent a position report. Blue rectangle by default.
 * **Contact icons**: one per situation report, at the location *in the report* (where the reporter saw something, which is
   usually not where the reporter is). Shape and colour come from the report's assessment.
-* **Station tint**: a station's icon takes the colour of that station's most recent situation report, so you can see at a
-  glance which reporters have flagged something and how serious it is. When that report expires the icon returns to blue.
+* **Station colour**: a station's icon shows the *Conditions at operator's location* of that station's latest
+  **Station SITREP**: green for A (all stable), orange for B (moderate disruptions), red for C (severe disruptions). A
+  station that has sent no SITREP, or whose SITREP has expired (4 h), is blue. SALUTE reports never change the station's
+  colour: they colour only their own contact icon, since what an operator saw says nothing about the operator.
 * **Ageing**: icons are fully opaque until the schema's `staleMin` (30 min), then fade linearly to 25% and are removed at
   `expireMin` (4 h for SALUTE, 24 h for positions). Your own icon never fades.
 * **Tap an icon** for the full report, its age, and distance and bearing from you.

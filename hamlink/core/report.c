@@ -292,7 +292,7 @@ int report_detail(const report_t *r, char *out, size_t cap) {
         char t[160];
         field_text(&s->fields[i], &r->v[i], t, sizeof t);
         if (s->fields[i].kind == RK_LATLON) {
-            char g[24] = "";
+            char g[32] = ""; /* geo_format needs at least 32 */
             geo_format(r->v[i].lat, r->v[i].lon, GEO_FMT_MAIDENHEAD, g, sizeof g);
             size_t n = strlen(t);
             snprintf(t + n, sizeof t - n, "  (%s)", g);

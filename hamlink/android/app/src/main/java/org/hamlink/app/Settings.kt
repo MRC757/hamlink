@@ -3,12 +3,20 @@ package org.hamlink.app
 
 import android.content.Context
 
+const val THEME_SYSTEM = 0
+const val THEME_LIGHT = 1
+const val THEME_DARK = 2
+
 class Settings(ctx: Context) {
     private val sp = ctx.getSharedPreferences("hamlink", Context.MODE_PRIVATE)
 
     var callsign: String
         get() = sp.getString("callsign", "") ?: ""
         set(v) = sp.edit().putString("callsign", v.trim().uppercase()).apply()
+    /** Screen colours: [THEME_SYSTEM] follows the phone's dark-theme setting. */
+    var theme: Int
+        get() = sp.getInt("theme", THEME_SYSTEM)
+        set(v) = sp.edit().putInt("theme", v.coerceIn(0, 2)).apply()
     var relay: Boolean
         get() = sp.getBoolean("relay", false)
         set(v) = sp.edit().putBoolean("relay", v).apply()
@@ -117,6 +125,10 @@ class Settings(ctx: Context) {
     var tileOnline: Boolean
         get() = sp.getBoolean("tileOnline", true)
         set(v) = sp.edit().putBoolean("tileOnline", v).apply()
+    /** Offline map pack (raster MBTiles, copied into app storage) used before the tile server; "" = none. */
+    var mapPackPath: String
+        get() = sp.getString("mapPackPath", "") ?: ""
+        set(v) = sp.edit().putString("mapPackPath", v).apply()
     var tileCacheMb: Int
         get() = sp.getInt("tileCacheMb", 300)
         set(v) = sp.edit().putInt("tileCacheMb", v.coerceIn(20, 4000)).apply()

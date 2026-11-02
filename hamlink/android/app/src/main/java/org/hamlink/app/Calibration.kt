@@ -61,8 +61,8 @@ fun CalibrationDialog(settings: Settings, onClose: () -> Unit) {
         Surface(modifier = Modifier.fillMaxWidth().padding(8.dp), shape = MaterialTheme.shapes.large) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("PTT test and calibration", style = MaterialTheme.typography.titleLarge)
-                if (!running) Text("Press Start on the main screen first: the radio engine must be running.", color = Color(0xFFC62828))
-                if (Hub.manualStage.isNotEmpty()) Text(Hub.manualStage, style = MaterialTheme.typography.titleMedium, color = Color(0xFFC62828))
+                if (!running) Text("Press Start on the main screen first: the radio engine must be running.", color = MaterialTheme.colorScheme.error)
+                if (Hub.manualStage.isNotEmpty()) Text(Hub.manualStage, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
                 if (settings.pttLine == "MANUAL") Text("Manual PTT: after you tap Transmit test, key the radio during the countdown and hold it until told to release.",
                     style = MaterialTheme.typography.bodySmall)
 
@@ -91,7 +91,7 @@ fun CalibrationDialog(settings: Settings, onClose: () -> Unit) {
                         Text(if (saved) "Saved" else "Use as TX level")
                     }
                 }
-                if (Hub.testing) Text("ON AIR", color = Color(0xFFC62828), style = MaterialTheme.typography.titleMedium)
+                if (Hub.testing) Text("ON AIR", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleMedium)
 
                 Text("Receive meter", style = MaterialTheme.typography.titleMedium)
                 Text("Peak %s dBFS   RMS %s dBFS".format(fmt(m.peakDb), fmt(m.rmsDb)))
@@ -109,7 +109,7 @@ fun CalibrationDialog(settings: Settings, onClose: () -> Unit) {
                     holdPeak >= -40f -> "Input level OK (a peak of about -20 to -6 dBFS is a good target)."
                     else -> "No signal yet."
                 }
-                Text(advice, color = if (m.clipped > 0) Color(0xFFC62828) else Color.Unspecified)
+                Text(advice, color = if (m.clipped > 0) MaterialTheme.colorScheme.error else Color.Unspecified)
                 OutlinedButton(onClick = { hold1200 = -120f; hold2200 = -120f; holdPeak = -120f }) { Text("Reset holds") }
 
                 Text("Two-station procedure", style = MaterialTheme.typography.titleMedium)

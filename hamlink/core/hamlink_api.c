@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "afsk.h"
+#include "audiocheck.h"
 #include "mesh.h"
 #include "mt63.h"
 #include "psk.h"
@@ -57,6 +58,7 @@ struct hl_ctx {
     repeat_t rep[REPEAT_SLOTS];
     seen_t seen[SEEN_SLOTS];
     int seen_next;
+    audiocheck_t audiocheck;     /* warns once about an input that suppresses steady signals */
     uint32_t rng;
     int64_t last_ms; /* most recent engine time seen; mesh callbacks do not carry it */
     int64_t clock_unix, clock_ms;
@@ -122,6 +124,7 @@ hl_ctx *HL_CALL hl_create(const char *callsign, int relay, int ttl, int preamble
     c->on_status = on_status;
     c->on_event = on_event;
     c->user = user;
+    audiocheck_init(&c->audiocheck);
     if (preamble_ms < 100) preamble_ms = 100;
     if (preamble_ms > 2000) preamble_ms = 2000;
     c->preamble_ms = preamble_ms;
@@ -201,6 +204,14 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
         if (c->orx) ofdm_rx_process(c->orx, pcm, (size_t)n);
         if (c->mrx && c->modem == HL_MODEM_MT63) mt63_rx_process(c->mrx, pcm, (size_t)n);
         if (c->prx && is_psk(c->modem)) psk_rx_process(c->prx, pcm, (size_t)n);
+        if (c->link == HL_LINK_AUDIO && audiocheck_feed(&c->audiocheck, pcm, (size_t)n) && c->on_event) {
+            char w[400];
+            snprintf(w, sizeof w, "WARNING: received transmissions drop by about %.0f dB after their first second. Something "
+                     "in the audio input is suppressing steady signals, so data will not decode reliably. Usual causes: a "
+                     "USB-C headset-style cable with built-in noise cancelling, or Windows audio enhancements. "
+                     "See Help > Troubleshooting.", c->audiocheck.last_drop_db);
+            c->on_event(c->user, w);
+        }
     }
     uint8_t frame[HDLC_MAX_FRAME];
     int len, repaired;

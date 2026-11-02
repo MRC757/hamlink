@@ -27,6 +27,37 @@ interface TileSource {
 }
 
 /**
+ * Which tile server URLs are allowed: https anywhere, plain http only to this phone or the local network (a tile server
+ * at a command post), never across the internet.
+ */
+object TileUrls {
+    /** Null if the template is usable, else a one-line reason for Map setup. */
+    fun problem(template: String): String? {
+        val t = template.trim()
+        if (!t.contains("{z}") || !t.contains("{x}") || !t.contains("{y}")) return "The URL needs {z}, {x} and {y} where the tile numbers go."
+        val u = try { java.net.URI(t.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0")) } catch (_: Exception) { null }
+        val host = u?.host ?: return "This is not a web address."
+        return when (u.scheme?.lowercase()) {
+            "https" -> null
+            "http" -> if (isLocal(host)) null else "Plain http:// is only allowed to this phone or the local network; use https://."
+            else -> "The URL must start with https:// (or http:// for a server on the local network)."
+        }
+    }
+
+    /** localhost, a private / link-local IP address, or a local-only name (no dot, .local, .lan, .home.arpa). No DNS lookup. */
+    fun isLocal(hostIn: String): Boolean {
+        val host = hostIn.trim('[', ']').lowercase()
+        val v4 = host.split(".").mapNotNull { it.toIntOrNull() }
+        if (v4.size == 4 && host.count { it == '.' } == 3) {
+            val (a, b) = v4
+            return a == 127 || a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168) || (a == 169 && b == 254)
+        }
+        if (host.contains(':')) return host == "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")
+        return host == "localhost" || !host.contains('.') || host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".home.arpa")
+    }
+}
+
+/**
  * Slippy-map raster tiles (default: openstreetmap.org) cached on disk.
  *
  * Behaviour follows the OSM tile usage policy (operations.osmfoundation.org/policies/tiles):
@@ -105,7 +136,7 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
 
     private fun fetch(z: Int, x: Int, y: Int, f: File, meta: Meta): Bitmap? {
         val url = settings.tileUrl.replace("{z}", "$z").replace("{x}", "$x").replace("{y}", "$y")
-        if (!url.startsWith("https://")) return null
+        if (TileUrls.problem(settings.tileUrl) != null) return null
         if (System.currentTimeMillis() < pauseUntil) return null
         val c = URL(url).openConnection() as HttpURLConnection
         try {

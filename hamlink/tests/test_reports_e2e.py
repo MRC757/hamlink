@@ -46,10 +46,10 @@ SAL = ("assess=Hostile\nsize_n=3\nsize_what=vehicles\nactivity=moving\nloc=FN31p
 
 
 def test_schemas_exposed_as_json():
-    assert A.hl_schema_count() == 2
-    docs = [json.loads(A.hl_schema_json(i)) for i in range(2)]
-    assert {d["name"] for d in docs} == {"POS", "SALUTE"}
-    assert A.hl_schema_json(2) is None
+    assert A.hl_schema_count() == 3
+    docs = [json.loads(A.hl_schema_json(i)) for i in range(3)]
+    assert {d["name"] for d in docs} == {"POS", "SALUTE", "SITREP"}
+    assert A.hl_schema_json(3) is None
 
 
 def test_position_and_salute_over_afsk_update_map():
@@ -67,7 +67,7 @@ def test_position_and_salute_over_afsk_update_map():
     ct = [r for r in rows if r[0] == "C"]
     assert [r[2] for r in st] == ["W1AAA"]
     assert st[0][5] == "0"                                           # exact GPS position: no uncertainty ring
-    assert st[0][6] == "#E53935"                                     # station tinted Hostile red by its SALUTE report
+    assert st[0][6] == "#1E88E5"                                     # a SALUTE colours its contact, not the reporter
     assert len(ct) == 1 and ct[0][6] == "#E53935" and ct[0][7] == "diamond"
     assert ct[0][11].startswith("Hostile: 3 vehicles")
     assert abs(float(ct[0][3]) - 41.73) < 0.05 and abs(float(ct[0][4]) + 72.71) < 0.05
@@ -77,20 +77,22 @@ def test_position_and_salute_over_afsk_update_map():
     assert any(r[0] == "C" for r in mine)
 
 
-def test_station_colour_reverts_when_report_expires_and_icon_fades():
+def test_station_colour_follows_sitrep_and_reverts_when_it_expires():
     a, b = N("W1AAA", seed=1), N("W2BBB", seed=2)
     clock(a, b)
     script = [(1.0, lambda t: send(a, "CQ", "POS", "loc=FN31pr\ntime=now\nsource=GPS\n", int(t * 1000))),
-              (25.0, lambda t: send(a, "CQ", "SALUTE", SAL, int(t * 1000)))]
-    run([a, b], LINKS, 70, script)
-    fresh = snap(b, 70_000)
-    assert [r[6] for r in fresh if r[0] == "S"] == ["#E53935"]
-    # 45 min later: SALUTE is stale (>30 min) so fading, still tinted; position still full alpha (stale at 30 too)
-    s45 = snap(b, 70_000 + 45 * 60_000)
+              (25.0, lambda t: send(a, "CQ", "SALUTE", SAL, int(t * 1000))),
+              (45.0, lambda t: send(a, "CQ", "SITREP", "cond=C: severe disruptions\npos=H: home\n", int(t * 1000)))]
+    run([a, b], LINKS, 90, script)
+    fresh = snap(b, 90_000)
+    assert [r[6] for r in fresh if r[0] == "S"] == ["#E53935"]     # SITREP condition C: red station
+    # 45 min later: SALUTE is stale (>30 min) so fading; the station keeps its SITREP colour
+    s45 = snap(b, 90_000 + 45 * 60_000)
     c = [r for r in s45 if r[0] == "C"][0]
     assert 0.25 < float(c[8]) < 1.0
-    # 5 h later: SALUTE (expires 4 h) gone -> station back to its own blue, contact removed
-    s5h = snap(b, 70_000 + 5 * 3600_000)
+    assert [r[6] for r in s45 if r[0] == "S"] == ["#E53935"]
+    # 5 h later: SITREP and SALUTE (expire 4 h) gone -> station back to its own blue, contact removed
+    s5h = snap(b, 90_000 + 5 * 3600_000)
     assert [r for r in s5h if r[0] == "C"] == []
     assert [r[6] for r in s5h if r[0] == "S"] == ["#1E88E5"]
     # 25 h later: position (expires 24 h) gone too

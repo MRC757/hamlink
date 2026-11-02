@@ -8,7 +8,6 @@
     "locField": "loc",
     "timeField": "observed",
     "colorField": "assess",
-    "tintStation": true,
     "staleMin": 30,
     "expireMin": 240,
     "label": "{assess}: {size_n} {size_what}, {activity}"

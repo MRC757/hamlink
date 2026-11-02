@@ -31,6 +31,10 @@ internal sealed class MapSetupWindow : Window
     readonly TextBox contact = new();
     readonly TextBox attribution = new();
     readonly StackPanel typedBox = new(), serialBox = new();
+    readonly TextBlock packInfo = new() { TextWrapping = TextWrapping.Wrap };
+    readonly TextBlock urlNote = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick };
+    readonly Button removePack = new() { Content = "Remove", Padding = new Thickness(12, 3, 12, 3) };
+    string packPath;
 
     public MapSetupWindow(Settings settings)
     {
@@ -56,6 +60,7 @@ internal sealed class MapSetupWindow : Window
         url.Text = s.TileUrl;
         contact.Text = s.TileContact;
         attribution.Text = s.TileAttribution;
+        packPath = s.MapPackPath;
 
         var root = new StackPanel { Margin = new Thickness(14) };
         root.Children.Add(Caption("Where am I? (used for the map and for \"Send my position\")"));
@@ -78,13 +83,25 @@ internal sealed class MapSetupWindow : Window
         root.Children.Add(Note("Position and SALUTE reports sent to everyone are not acknowledged, so one lost transmission loses the report. " +
             "Extra copies go out about 30 s apart; other stations show the report once. Each copy is a transmission."));
 
+        root.Children.Add(Caption("Offline map file"));
+        root.Children.Add(packInfo);
+        var packButtons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var openPack = new Button { Content = "Open map file...", Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 0, 8, 0) };
+        openPack.Click += (_, _) => PickPack();
+        removePack.Click += (_, _) => { packPath = ""; ShowPack(); };
+        packButtons.Children.Add(openPack); packButtons.Children.Add(removePack);
+        root.Children.Add(packButtons);
+        root.Children.Add(Note("A raster MBTiles file (.mbtiles) covering your area, made with tools/make_mbtiles.py: it works with no " +
+            "internet at all. Where it has no tiles, the tile server below (and tiles saved from it) fill in."));
+
         root.Children.Add(Caption("Map data"));
         root.Children.Add(online);
-        root.Children.Add(Note("Tiles you have viewed are saved on this PC and work offline later. Pan and zoom over your operating area while you " +
-            "still have internet. OpenStreetMap's server does not allow bulk downloading. For an air-gapped PC, view the area on another " +
-            "PC and copy the folder %LOCALAPPDATA%\\HamLink\\tiles across."));
+        root.Children.Add(Note("Tiles you have viewed are saved on this PC and work offline later. OpenStreetMap's server does not allow bulk " +
+            "downloading, so for a whole area use an offline map file above."));
         root.Children.Add(Caption("Tile server URL"));
         root.Children.Add(url);
+        root.Children.Add(urlNote);
+        root.Children.Add(Note("https:// for internet servers; http:// is accepted only for a tile server on this PC or the local network."));
         root.Children.Add(Caption("Contact for tile server (email), optional"));
         root.Children.Add(contact);
         root.Children.Add(Caption("Attribution shown on the map"));
@@ -101,8 +118,27 @@ internal sealed class MapSetupWindow : Window
 
         mode.SelectionChanged += (_, _) => { UpdateSections(); UpdatePreview(); };
         typed.TextChanged += (_, _) => UpdatePreview();
+        url.TextChanged += (_, _) => urlNote.Text = TileUrls.Problem(url.Text.Trim()) ?? "";
+        urlNote.Text = TileUrls.Problem(url.Text.Trim()) ?? "";
         UpdateSections();
         UpdatePreview();
+        ShowPack();
+    }
+
+    void PickPack()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Open offline map file", Filter = "MBTiles map (*.mbtiles)|*.mbtiles|All files (*.*)|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        try { using var p = MapPack.Open(dlg.FileName); packPath = dlg.FileName; ShowPack(); }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot use this map file"); }
+    }
+
+    void ShowPack()
+    {
+        removePack.IsEnabled = packPath.Length > 0;
+        if (packPath.Length == 0) { packInfo.Text = "None"; packInfo.Foreground = Brushes.DimGray; return; }
+        try { using var p = MapPack.Open(packPath); packInfo.Text = p.Describe(); packInfo.Foreground = Brushes.Black; }
+        catch (Exception ex) { packInfo.Text = ex.Message; packInfo.Foreground = Brushes.Firebrick; }
     }
 
     static TextBlock Caption(string t) => new() { Text = t, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 2), TextWrapping = TextWrapping.Wrap };
@@ -145,6 +181,7 @@ internal sealed class MapSetupWindow : Window
         s.TileUrl = url.Text.Trim();
         s.TileContact = contact.Text.Trim();
         s.TileAttribution = attribution.Text.Trim();
+        s.MapPackPath = packPath;
         s.Save();
         Positions.Apply(s);
         DialogResult = true;

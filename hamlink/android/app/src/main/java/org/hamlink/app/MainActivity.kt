@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
@@ -56,11 +57,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.SideEffect
+import androidx.core.view.WindowCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { App() } } }
+        Hub.theme = Settings(this).theme
+        setContent {
+            val dark = when (Hub.theme) { THEME_DARK -> true; THEME_LIGHT -> false; else -> isSystemInDarkTheme() }
+            // the app draws behind the status and navigation bars: their icons must contrast with our background
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
+                Surface(Modifier.fillMaxSize()) { App() }
+            }
+        }
     }
 }
 
@@ -71,6 +90,7 @@ private fun App() {
     val settings = remember { Settings(ctx) }
     var showSettings by remember { mutableStateOf(!settings.callsignValid()) }
     var showCal by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
     var relay by remember { mutableStateOf(settings.relay) }
     var modemSel by remember { mutableStateOf(settings.modem) }
     var dest by remember { mutableStateOf(settings.dest) }
@@ -82,6 +102,9 @@ private fun App() {
     val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         val ok = if (settings.transport == "tnc") Build.VERSION.SDK_INT < 31 || granted[Manifest.permission.BLUETOOTH_CONNECT] == true
                  else granted[Manifest.permission.RECORD_AUDIO] == true
+        // location is optional: if refused the radio still starts, and Map setup offers it again
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true || granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true)
+            Positions.apply(ctx)
         if (ok) RadioService.start(ctx)
     }
     // Bluetooth permission on its own, so the settings dialog can list paired radios before Start.
@@ -93,6 +116,10 @@ private fun App() {
         if (settings.transport == "tnc") { if (Build.VERSION.SDK_INT >= 31) need += Manifest.permission.BLUETOOTH_CONNECT }
         else need += Manifest.permission.RECORD_AUDIO
         if (Build.VERSION.SDK_INT >= 33) need += Manifest.permission.POST_NOTIFICATIONS
+        // Phone GPS is the default position source: ask together with the microphone, so the map and
+        // "Send my position" work without a trip to Map setup.
+        if (settings.positionMode == "gps" && !GpsProvider.permitted(ctx))
+            need += listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (need.isEmpty()) RadioService.start(ctx) else perms.launch(need.toTypedArray())
     }
 
@@ -125,16 +152,17 @@ private fun App() {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(settings.callsign.ifEmpty { "set callsign" }, style = MaterialTheme.typography.titleLarge,
                 maxLines = 1, modifier = Modifier.weight(1f))
-            Row {
-                OutlinedButton(onClick = { showSettings = true }) { Text("Settings") }
-                Box(Modifier.width(8.dp))
+            // tighter than the default padding so Help, Settings, Test and Start fit on a phone beside the callsign
+            val pad = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { showHelp = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.width(44.dp)) { Text("?") }
+                OutlinedButton(onClick = { showSettings = true }, contentPadding = pad) { Text("Settings") }
                 OutlinedButton(onClick = {
                     if (settings.transport == "tnc")
                         Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "PTT test and calibration only apply to the audio link, not Bluetooth TNC mode"))
                     else showCal = true
-                }) { Text("Test") }
-                Box(Modifier.width(8.dp))
-                Button(onClick = { if (on) RadioService.stop(ctx) else startRadio() }) { Text(if (on) "Stop" else "Start") }
+                }, contentPadding = pad) { Text("Test") }
+                Button(onClick = { if (on) RadioService.stop(ctx) else startRadio() }, contentPadding = pad) { Text(if (on) "Stop" else "Start") }
             }
         }
         if (Hub.audioRoute.isNotEmpty()) Text(Hub.audioRoute, style = MaterialTheme.typography.bodySmall)
@@ -173,11 +201,11 @@ private fun App() {
         }
 
         // ---- manual PTT: you key the radio when the countdown says so
-        if (on && Hub.manualMode) {
+        if (on && Hub.manualMode && tab == 0) { // the Map tab has its own Transmit row under the map
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (Hub.manualStage.isNotEmpty()) {
-                        Text(Hub.manualStage, style = MaterialTheme.typography.titleMedium, color = Color(0xFFC62828))
+                        Text(Hub.manualStage, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
                     } else {
                         Text("Manual PTT: ${Hub.manualPending} frame(s) waiting. Tap Transmit, then key the radio when told.")
                     }
@@ -214,7 +242,7 @@ private fun App() {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Text(prefix + item.text + (status?.let { "  [$it]" } ?: ""),
-                        color = if (item.kind == Hub.Kind.ERROR || status?.startsWith("FAILED") == true) Color(0xFFC62828)
+                        color = if (item.kind == Hub.Kind.ERROR || status?.startsWith("FAILED") == true) MaterialTheme.colorScheme.error
                         else if (item.kind == Hub.Kind.EVENT) Color.Gray else Color.Unspecified,
                         modifier = Modifier.weight(1f))
                     item.clip?.let { pcm -> TextButton(onClick = { VoicePlayer.play(ctx, pcm) }) { Text("Play") } }
@@ -255,7 +283,7 @@ private fun App() {
                         })
                     },
                 contentAlignment = Alignment.Center
-            ) { Text(if (recording) "Recording… release to send" else "Hold to record voice", color = Color.White) }
+            ) { Text(if (recording) "Recording… release to send" else "Hold to record voice", color = if (recording) Color.White else MaterialTheme.colorScheme.onPrimary) }
         }
         } // tab == 0
     }
@@ -270,6 +298,7 @@ private fun App() {
             }
         })
     if (showCal) CalibrationDialog(settings, onClose = { showCal = false })
+    if (showHelp) HelpDialog(onClose = { showHelp = false })
 }
 
 @Composable
@@ -303,6 +332,14 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(call, { call = it.uppercase().take(8) }, label = { Text("Your callsign (required)") }, singleLine = true)
 
+                // applies (and is saved) as soon as a chip is tapped, so the choice can be seen before Save
+                Text("Appearance")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(THEME_SYSTEM to "Phone setting", THEME_LIGHT to "Light", THEME_DARK to "Dark").forEach { (t, label) ->
+                        FilterChip(selected = Hub.theme == t, onClick = { s.theme = t; Hub.theme = t }, label = { Text(label) })
+                    }
+                }
+
                 Text("Radio link")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = !tnc, onClick = { transport = "audio" }, label = { Text("Audio + PTT") })
@@ -320,7 +357,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                     if (!hasBt) {
                         OutlinedButton(onClick = requestBt) { Text("Allow Bluetooth access") }
                     } else if (paired.isEmpty()) {
-                        Text("No paired Bluetooth devices found. Pair the radio first, then reopen Settings.", color = Color(0xFFC62828))
+                        Text("No paired Bluetooth devices found. Pair the radio first, then reopen Settings.", color = MaterialTheme.colorScheme.error)
                     } else {
                         Text("Radio:")
                         paired.forEach { (name, addr) ->

@@ -218,7 +218,7 @@ class Engine(private val ctx: Context) : MeshListener {
     }
 
     override fun onEvent(text: String) {
-        Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, text))
+        Hub.addLog(Hub.LogItem(if (text.startsWith("WARNING")) Hub.Kind.ERROR else Hub.Kind.EVENT, text)) // core warnings in red
     }
 
     // ------------------------------------------------------------------ audio plumbing

@@ -17,8 +17,9 @@ internal sealed class MapPanel : Grid
     readonly Button sendPos = new() { Content = "Send my position", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
     readonly Button newReport = new() { Content = "New report...", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
     string? selectedKey;
-    HttpTileSource tiles;
-    string tilesFor;
+    string tilesFor = "\0"; // the settings the current tile source was built for
+    MapPack? pack;
+    string packNote = "";
 
     public MapPanel(Settings settings, Engine engine)
     {
@@ -28,9 +29,6 @@ internal sealed class MapPanel : Grid
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        tilesFor = settings.TileUrl;
-        tiles = new HttpTileSource(settings);
-        map.Source = tiles;
         map.ItemSelected += OnSelect;
         map.MapRightClicked += (lat, lon) =>
         {
@@ -94,8 +92,9 @@ internal sealed class MapPanel : Grid
     /// <summary>Re-read settings and position after Map setup, a position change or engine start/stop.</summary>
     public void Refresh()
     {
-        if (tilesFor != settings.TileUrl) { tilesFor = settings.TileUrl; tiles = new HttpTileSource(settings); map.Source = tiles; }
-        attribution.Text = settings.TileAttribution + (settings.TileOnline ? "" : "   (offline: saved tiles only)");
+        RebuildTilesIfChanged();
+        attribution.Text = (map.Source?.Attribution ?? settings.TileAttribution) + packNote +
+                           (settings.TileOnline ? "" : "   (offline: map pack and saved tiles only)");
         var fix = Positions.Current;
         map.SetMe(fix);
         posText.Text = Positions.Status;
@@ -105,6 +104,24 @@ internal sealed class MapPanel : Grid
             !engine.IsRunning ? startFirst : "Set your position first: Map setup... > Where am I?");
         Ui.Enable(newReport, engine.IsRunning, startFirst);
         if (fix != null && !map.CamPlaced) map.CenterOn(fix.Lat, fix.Lon, 12);
+    }
+
+    /// <summary>Tile source = map pack (if set) in front of the tile server and its cache. Rebuilt when either changes.</summary>
+    void RebuildTilesIfChanged()
+    {
+        string key = settings.TileUrl + "\n" + settings.MapPackPath;
+        if (key == tilesFor) return;
+        tilesFor = key;
+        pack?.Dispose();
+        pack = null;
+        packNote = "";
+        ITileSource src = new HttpTileSource(settings);
+        if (settings.MapPackPath.Length > 0)
+        {
+            try { pack = MapPack.Open(settings.MapPackPath); src = new PackTileSource(pack, src); }
+            catch (Exception ex) { packNote = "   (map pack not loaded: " + ex.Message + ")"; App.LogError("map pack", ex); }
+        }
+        map.Source = src;
     }
 
     void OnSelect(string? key)

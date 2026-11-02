@@ -5,13 +5,15 @@
   "title": "Station SITREP",
   "map": {
     "role": "none",
-    "label": "{cond} / {pos}"
+    "label": "{cond} / {pos}",
+    "colorField": "cond",
+    "tintStation": true
   },
   "fields": [
     {"key": "cond", "label": "1. Conditions at operator's location", "kind": "enum", "values": [
-      {"code": 0, "name": "A: all stable"},
-      {"code": 1, "name": "B: moderate disruptions"},
-      {"code": 2, "name": "C: severe disruptions"}
+      {"code": 0, "name": "A: all stable", "color": "#43A047", "severity": 1},
+      {"code": 1, "name": "B: moderate disruptions", "color": "#FB8C00", "severity": 3},
+      {"code": 2, "name": "C: severe disruptions", "color": "#E53935", "severity": 4}
     ]},
     {"key": "pos", "label": "2. Operator's position", "kind": "enum", "values": [
       {"code": 0, "name": "H: home"},

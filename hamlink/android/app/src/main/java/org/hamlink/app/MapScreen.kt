@@ -42,7 +42,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MapScreen(settings: Settings) {
     val ctx = LocalContext.current
-    val source = remember(settings.tileUrl, settings.tileOnline) { HttpTileSource(ctx.applicationContext, settings) }
+    // map pack (if set) in front of the tile server and its cache; rebuilt when Map setup changes either
+    val (source, packError) = remember(settings.tileUrl, settings.tileOnline, settings.mapPackPath) {
+        val online = HttpTileSource(ctx.applicationContext, settings)
+        if (settings.mapPackPath.isEmpty()) Pair<TileSource, String?>(online, null)
+        else try { Pair<TileSource, String?>(PackTileSource(MapPack.open(settings.mapPackPath), online), null) }
+        catch (e: IllegalArgumentException) { Pair<TileSource, String?>(online, "Map pack not loaded: ${e.message}") }
+    }
     var showReport by remember { mutableStateOf(false) }
     var reportAt by remember { mutableStateOf<Pair<Double, Double>?>(null) } // set by a long-press on the map
     var showSettings by remember { mutableStateOf(false) }
@@ -67,10 +73,11 @@ fun MapScreen(settings: Settings) {
                 MapButton("−") { Hub.camZoom = (Hub.camZoom - 1f).coerceAtLeast(2f) }
                 MapButton("◎") { Hub.position?.let { Hub.camLat = it.lat; Hub.camLon = it.lon; if (Hub.camZoom < 10f) Hub.camZoom = 12f } }
             }
-            Text(source.attribution, style = MaterialTheme.typography.labelSmall,
+            Text(source.attribution, style = MaterialTheme.typography.labelSmall, color = Color.Black, // on a white box in both themes
                 modifier = Modifier.align(Alignment.BottomEnd).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp))
-            if (!settings.tileOnline)
-                Text("Offline: showing saved map tiles only", style = MaterialTheme.typography.labelSmall,
+            val note = packError ?: if (!settings.tileOnline) "Offline: map pack and saved tiles only" else null
+            if (note != null)
+                Text(note, style = MaterialTheme.typography.labelSmall, color = Color.Black, // on a white box in both themes
                     modifier = Modifier.align(Alignment.BottomStart).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp))
         }
 
@@ -84,6 +91,20 @@ fun MapScreen(settings: Settings) {
                     onClick = { RadioService.engine?.sendPosition() }) { Text("Send my position") }
                 Button(enabled = running, modifier = Modifier.weight(1f), onClick = { reportAt = null; showReport = true }) { Text("New report") }
                 OutlinedButton(onClick = { showSettings = true }) { Text("Map setup") }
+            }
+            // Manual PTT: send positions and reports without going back to the Messages tab to transmit them
+            if (running && Hub.manualMode) {
+                if (Hub.manualStage.isNotEmpty())
+                    Text(Hub.manualStage, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = Hub.manualPending > 0 && Hub.manualStage.isEmpty() && !Hub.testing,
+                        modifier = Modifier.weight(1f), onClick = { RadioService.engine?.manualGo() }) {
+                        Text(if (Hub.manualPending > 0) "Transmit ${Hub.manualPending} waiting (${settings.manualCountdown} s)"
+                             else "Transmit (nothing waiting)")
+                    }
+                    if (Hub.manualStage.isNotEmpty())
+                        OutlinedButton(onClick = { RadioService.engine?.manualCancel() }) { Text("Cancel") }
+                }
             }
         }
     }
@@ -108,7 +129,25 @@ private fun MapSetupDialog(s: Settings, onClose: () -> Unit) {
     var url by remember { mutableStateOf(s.tileUrl) }
     var contact by remember { mutableStateOf(s.tileContact) }
     var attribution by remember { mutableStateOf(s.tileAttribution) }
+    var packPath by remember { mutableStateOf(s.mapPackPath) }
+    var packInfo by remember { mutableStateOf(describePack(s.mapPackPath)) }
+    var importing by remember { mutableStateOf(false) }
     val locPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { Positions.apply(ctx) }
+    // copy the chosen .mbtiles into app storage off the UI thread (packs can be hundreds of MB)
+    val pickPack = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        importing = true
+        packInfo = "Copying the map file…"
+        Thread {
+            val result = try { Result.success(MapPack.import(ctx.applicationContext, uri)) } catch (e: IllegalArgumentException) { Result.failure(e) }
+            Hub.ui {
+                importing = false
+                result.onSuccess { packPath = it; packInfo = describePack(it) }
+                    .onFailure { packInfo = "Cannot use this map file: ${it.message}" }
+            }
+        }.start()
+    }
+    val urlProblem = TileUrls.problem(url)
 
     val parsed = if (mode == "gps" || typed.isBlank()) null else TypedPosition.parse(typed, mode == "grid")
 
@@ -135,7 +174,7 @@ private fun MapSetupDialog(s: Settings, onClose: () -> Unit) {
                         OutlinedTextField(typed, { typed = it }, singleLine = true,
                             label = { Text(if (mode == "grid") "Grid square, e.g. FN31pr" else "Lat, lon  (38.8895, -77.0353  or  38d53m22sN 77d02m07sW  or MGRS)") })
                         if (typed.isNotBlank()) {
-                            if (parsed == null) Text(if (mode == "grid") "Not a grid square" else "Cannot read this position", color = Color(0xFFC62828))
+                            if (parsed == null) Text(if (mode == "grid") "Not a grid square" else "Cannot read this position", color = MaterialTheme.colorScheme.error)
                             else Text("= %.5f, %.5f  %s".format(parsed.lat, parsed.lon, Native.geoFormat(parsed.lat, parsed.lon, 2)) +
                                 if (parsed.radiusM > 0) "  (accurate to about %.1f km)".format(parsed.radiusM / 1000) else "",
                                 style = MaterialTheme.typography.bodySmall)
@@ -164,13 +203,24 @@ private fun MapSetupDialog(s: Settings, onClose: () -> Unit) {
                     "Extra copies go out about 30 s apart; other stations show the report once. Each copy is a transmission.",
                     style = MaterialTheme.typography.bodySmall)
 
+                Text("Offline map file", style = MaterialTheme.typography.labelLarge)
+                Text(packInfo, style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !importing, onClick = { pickPack.launch(arrayOf("*/*")) }) { Text("Open map file…") }
+                    if (packPath.isNotEmpty()) OutlinedButton(enabled = !importing, onClick = { packPath = ""; packInfo = describePack("") }) { Text("Remove") }
+                }
+                Text("A raster MBTiles file (.mbtiles) covering your area, made with tools/make_mbtiles.py: it works with no internet " +
+                    "at all. It is copied into HamLink's storage. Where it has no tiles, the tile server below fills in.",
+                    style = MaterialTheme.typography.bodySmall)
+
                 Text("Map data", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(online, { online = it }); Box(Modifier.width(8.dp)); Text("Download map tiles when needed (needs internet)")
                 }
-                Text("Tiles you have viewed are saved on the phone and work offline later. Pan and zoom over your operating area " +
-                    "while you still have internet. OpenStreetMap's server does not allow bulk downloading.", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(url, { url = it }, label = { Text("Tile server URL") }, minLines = 2)
+                Text("Tiles you have viewed are saved on the phone and work offline later. OpenStreetMap's server does not allow " +
+                    "bulk downloading, so for a whole area use an offline map file above.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(url, { url = it }, label = { Text("Tile server URL") }, minLines = 2, isError = urlProblem != null,
+                    supportingText = { Text(urlProblem ?: "https:// for internet servers; http:// only for a server on the local network") })
                 OutlinedTextField(contact, { contact = it }, singleLine = true, label = { Text("Contact for tile server (email), optional") })
                 OutlinedTextField(attribution, { attribution = it }, singleLine = true, label = { Text("Attribution shown on the map") })
             }
@@ -180,10 +230,19 @@ private fun MapSetupDialog(s: Settings, onClose: () -> Unit) {
                 s.positionMode = mode; s.typedPosition = typed; s.beaconMin = beacon; s.reportRepeat = repeat
                 RadioService.engine?.setReportRepeat(repeat)
                 s.tileOnline = online; s.tileUrl = url; s.tileContact = contact; s.tileAttribution = attribution
+                s.mapPackPath = packPath
+                MapPack.deleteOthers(ctx, packPath)   // the replaced or removed pack's copy
                 Positions.apply(ctx)
                 onClose()
-            }) { Text("Save") }
+            }, enabled = !importing) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = {
+            MapPack.deleteOthers(ctx, s.mapPackPath)  // drop a pack imported but not saved
+            onClose()
+        }, enabled = !importing) { Text("Cancel") } },
     )
 }
+
+private fun describePack(path: String): String =
+    if (path.isEmpty()) "None"
+    else try { MapPack.open(path).let { p -> p.describe().also { p.close() } } } catch (e: IllegalArgumentException) { e.message ?: "Cannot open" }

@@ -25,12 +25,22 @@ typedef struct {
     uint8_t raw_len;
 } contact_t;
 
+/* A station's latest status report from a schema with map.tintStation (the Station SITREP). It carries no location,
+ * so it is kept per callsign rather than as a contact; the station icon takes the colour of its map.colorField. */
+typedef struct {
+    int used;
+    char call[16];
+    report_t rep;
+    int64_t rx_unix;
+} tint_t;
+
 struct map_model {
     char self[16];
     int has_self_pos;
     double self_lat, self_lon;
     station_t st[MAP_MAX_STATIONS];
     contact_t ct[MAP_MAX_CONTACTS];
+    tint_t tn[MAP_MAX_STATIONS];
     unsigned next_id;
 };
 
@@ -123,6 +133,10 @@ void map_prune(map_model_t *m, int64_t now) {
         if (alpha_for(c->rep.schema, age_min(report_when(&c->rep, c->rx_unix), now)) < 0) c->used = 0;
     }
     for (int i = 0; i < MAP_MAX_STATIONS; i++) {
+        tint_t *t = &m->tn[i];
+        if (t->used && alpha_for(t->rep.schema, age_min(report_when(&t->rep, t->rx_unix), now)) < 0) t->used = 0;
+    }
+    for (int i = 0; i < MAP_MAX_STATIONS; i++) {
         station_t *s = &m->st[i];
         if (!s->used || s->self) continue;
         const rschema_t *sc = report_schema_by_id(s->schema_id);
@@ -136,10 +150,28 @@ int map_ingest(map_model_t *m, const char *reporter_in, const uint8_t *data, siz
     if (rc) return rc;
     char reporter[16];
     upcase_copy(reporter, sizeof reporter, reporter_in);
-    double lat, lon;
-    if (!reporter[0] || !report_location(&r, &lat, &lon)) return 0;
+    if (!reporter[0]) return 0;
     int64_t when = report_when(&r, now);
     if (alpha_for(r.schema, age_min(when, now)) < 0) return 0;      /* already expired */
+
+    if (r.schema->tint_station && r.schema->color_field >= 0) {   /* station status (SITREP): colours the station */
+        tint_t *slot = NULL, *free_slot = NULL, *oldest = NULL;
+        for (int i = 0; i < MAP_MAX_STATIONS; i++) {
+            tint_t *t = &m->tn[i];
+            if (t->used && !strcmp(t->call, reporter)) { slot = t; break; }
+            if (!t->used && !free_slot) free_slot = t;
+            if (t->used && (!oldest || t->rx_unix < oldest->rx_unix)) oldest = t;
+        }
+        if (slot && report_when(&slot->rep, slot->rx_unix) > when) return 0;   /* older than the one we have */
+        if (!slot) slot = free_slot ? free_slot : oldest;
+        memset(slot, 0, sizeof *slot);
+        slot->used = 1; slot->rep = r; slot->rx_unix = now;
+        snprintf(slot->call, sizeof slot->call, "%s", reporter);
+        if (r.schema->role == RR_NONE) return 1;
+    }
+
+    double lat, lon;
+    if (!report_location(&r, &lat, &lon)) return 0;
 
     if (r.schema->role == RR_STATION) {
         station_t *s = find_station(m, reporter, 1, now);
@@ -187,18 +219,14 @@ static look_t contact_look(const report_t *r) {
     return l;
 }
 
-/* latest tinting contact from this reporter, or NULL */
-static const contact_t *tint_for(const map_model_t *m, const char *call, int64_t now) {
-    const contact_t *best = NULL;
-    int64_t best_t = 0;
-    for (int i = 0; i < MAP_MAX_CONTACTS; i++) {
-        const contact_t *c = &m->ct[i];
-        if (!c->used || !c->rep.schema->tint_station || strcmp(c->reporter, call)) continue;
-        int64_t w = report_when(&c->rep, c->rx_unix);
-        if (alpha_for(c->rep.schema, age_min(w, now)) < 0) continue;
-        if (!best || w >= best_t) { best = c; best_t = w; }
+/* this station's latest unexpired status report (SITREP), or NULL */
+static const tint_t *tint_for(const map_model_t *m, const char *call, int64_t now) {
+    for (int i = 0; i < MAP_MAX_STATIONS; i++) {
+        const tint_t *t = &m->tn[i];
+        if (!t->used || strcmp(t->call, call)) continue;
+        return alpha_for(t->rep.schema, age_min(report_when(&t->rep, t->rx_unix), now)) < 0 ? NULL : t;
     }
-    return best;
+    return NULL;
 }
 
 int map_snapshot(map_model_t *m, int64_t now, char *out, size_t cap) {
@@ -217,7 +245,7 @@ int map_snapshot(map_model_t *m, int64_t now, char *out, size_t cap) {
                 if (!sc) continue;
                 double age = age_min(s->pos_unix ? s->pos_unix : s->rx_unix, now);
                 double alpha = s->self ? 1.0 : alpha_for(sc, age);
-                const contact_t *t = tint_for(m, s->call, now);
+                const tint_t *t = tint_for(m, s->call, now);
                 const char *color = sc->style_color ? sc->style_color : "#1E88E5";
                 int sev = 0;
                 if (t) { look_t l = contact_look(&t->rep); color = l.color; sev = l.sev; }
@@ -254,14 +282,14 @@ int map_detail(map_model_t *m, const char *key, int64_t now, char *out, size_t c
         const station_t *s = find_station(m, key + 2, 0, now);
         if (!s) return 0;
         lat = s->lat; lon = s->lon; age = age_min(s->pos_unix ? s->pos_unix : s->rx_unix, now);
-        char g[24] = "";
+        char g[32] = ""; /* geo_format needs at least 32 */
         geo_format(lat, lon, GEO_FMT_MAIDENHEAD, g, sizeof g);
         o = (size_t)snprintf(out, cap, "%s%s\nPosition: %.5f %.5f (%s)\n", s->call, s->self ? " (you)" : "", lat, lon, g);
         if (s->radius_m > 0 && o < cap) o += (size_t)snprintf(out + o, cap - o, "Accuracy: about %.0f m\n", s->radius_m);
-        const contact_t *t = tint_for(m, s->call, now);
+        const tint_t *t = tint_for(m, s->call, now);
         if (t && o < cap) {
             char sum[160]; report_summary(&t->rep, sum, sizeof sum);
-            o += (size_t)snprintf(out + o, cap - o, "Latest report: %s\n", sum);
+            o += (size_t)snprintf(out + o, cap - o, "Latest %s: %s\n", t->rep.schema->name, sum);
         }
     } else if (!strncmp(key, "C:", 2)) {
         unsigned id = (unsigned)strtoul(key + 2, NULL, 10);

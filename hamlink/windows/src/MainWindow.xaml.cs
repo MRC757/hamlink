@@ -198,6 +198,16 @@ public partial class MainWindow : Window
         engine.SetModem(settings.Modem); // takes effect at once while running; otherwise at the next Start
     }
 
+    HelpWindow? help;
+    /// <summary>Help is not modal: it can stay open beside the main window while you work.</summary>
+    void OnHelp(object sender, RoutedEventArgs e)
+    {
+        if (help != null) { help.Activate(); return; }
+        help = new HelpWindow { Owner = this };
+        help.Closed += (_, _) => help = null;
+        help.Show();
+    }
+
     void OnManualGo(object sender, RoutedEventArgs e) => engine.ManualGo();
     void OnManualCancel(object sender, RoutedEventArgs e) => engine.ManualCancel();
 

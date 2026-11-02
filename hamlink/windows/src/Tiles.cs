@@ -23,6 +23,39 @@ internal interface ITileSource
     ImageSource? Tile(int z, int x, int y);
 }
 
+/// <summary>Which tile server URLs are allowed: https anywhere, plain http only to this computer or the local network
+/// (a tile server at a command post), never across the internet.</summary>
+internal static class TileUrls
+{
+    /// <summary>Null if the template is usable, else a one-line reason for Map setup.</summary>
+    public static string? Problem(string template)
+    {
+        if (!template.Contains("{z}") || !template.Contains("{x}") || !template.Contains("{y}"))
+            return "The URL needs {z}, {x} and {y} where the tile numbers go.";
+        if (!Uri.TryCreate(template.Replace("{z}", "0").Replace("{x}", "0").Replace("{y}", "0"), UriKind.Absolute, out var u))
+            return "This is not a web address.";
+        if (u.Scheme == Uri.UriSchemeHttps) return null;
+        if (u.Scheme == Uri.UriSchemeHttp)
+            return IsLocal(u.Host) ? null : "Plain http:// is only allowed to this computer or the local network; use https://.";
+        return "The URL must start with https:// (or http:// for a server on the local network).";
+    }
+
+    /// <summary>localhost, a private / link-local IP address, or a local-only name (no dot, .local, .lan, .home.arpa).</summary>
+    public static bool IsLocal(string host)
+    {
+        host = host.Trim('[', ']').ToLowerInvariant();
+        if (System.Net.IPAddress.TryParse(host, out var ip))
+        {
+            if (System.Net.IPAddress.IsLoopback(ip)) return true;
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+                return ip.IsIPv6LinkLocal || ip.IsIPv6UniqueLocal;
+            byte[] b = ip.GetAddressBytes();
+            return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 169 && b[1] == 254);
+        }
+        return host == "localhost" || !host.Contains('.') || host.EndsWith(".local") || host.EndsWith(".lan") || host.EndsWith(".home.arpa");
+    }
+}
+
 /// <summary>
 /// Slippy-map raster tiles (default: openstreetmap.org) cached on disk under %LOCALAPPDATA%\HamLink\tiles.
 /// Follows the OSM tile usage policy (operations.osmfoundation.org/policies/tiles): tiles are fetched only when the
@@ -142,7 +175,7 @@ internal sealed class HttpTileSource : ITileSource
     async Task<ImageSource?> Fetch(int z, int x, int y, string path, string? etag, bool haveFile)
     {
         string url = s.TileUrl.Replace("{z}", z.ToString()).Replace("{x}", x.ToString()).Replace("{y}", y.ToString());
-        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return null;
+        if (TileUrls.Problem(s.TileUrl) != null) return null;
         await net.WaitAsync();
         try
         {
@@ -201,7 +234,7 @@ internal sealed class HttpTileSource : ITileSource
         return (long)Math.Max((age ?? TimeSpan.FromDays(7)).TotalSeconds, 3600) * 1000;
     }
 
-    static ImageSource? Decode(byte[] bytes)
+    internal static ImageSource? Decode(byte[] bytes)
     {
         try
         {

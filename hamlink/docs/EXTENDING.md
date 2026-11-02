@@ -16,7 +16,8 @@ schemas/*.json  --(tools/gen_schemas.py)-->  core/schemas_gen.[ch]  -->  core/re
    `uint` (`bits` 1-16, optional `max`), `text` (`max` 1-63, 6-bit charset), `latlon`, `time` (24-bit minutes), `flags`
    (up to 32 named bits). Add `"optional": true` for fields that may be left out (costs 1 bit).
 3. Add a `map` section if it should appear on the map: `role` `contact` (an icon at the report's own location) or `station`
-   (a reporter's own position), `locField`, `timeField`, `colorField` (an enum whose values carry colours), `tintStation`,
+   (a reporter's own position), `locField`, `timeField`, `colorField` (an enum whose values carry colours), `tintStation` (the reporter's
+   station icon takes the `colorField` colour of its latest report of this type; works with role `none`, as the SITREP does),
    `staleMin`, `expireMin`, and a `label` template such as `"{assess}: {size_n} {size_what}"`.
 4. Run `python3 tools/gen_schemas.py`. It validates everything (unique ids and keys, colours, field references, worst-case
    size must fit one frame) and refuses with a message otherwise. Commit the regenerated `core/schemas_gen.[ch]`.

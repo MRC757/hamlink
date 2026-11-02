@@ -15,6 +15,8 @@
         <!-- header -->
         <DockPanel Grid.Row="0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Content="Help" Padding="14,5" Margin="0,0,8,0" Click="OnHelp"
+                        ToolTip="Equipment for each modem, offline maps, troubleshooting" />
                 <Button x:Name="SettingsBtn" Content="Settings" Padding="14,5" Margin="0,0,8,0" Click="OnSettings" />
                 <Button x:Name="TestBtn" Content="Test / Calibrate" Padding="14,5" Margin="0,0,8,0" Click="OnTest" />
                 <Button x:Name="StartBtn" Content="Start" Padding="20,5" Click="OnStartStop" />
@@ -66,8 +68,9 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- manual PTT: you key the radio when the countdown says so -->
-        <Border x:Name="ManualPanel" Grid.Row="3" Visibility="Collapsed" Background="#FFF3E0" BorderBrush="DarkOrange"
+        <!-- manual PTT: you key the radio when the countdown says so. Bottom row, below the map too, so positions and
+             reports sent from the Map view can be transmitted without switching back to Messages -->
+        <Border x:Name="ManualPanel" Grid.Row="4" Visibility="Collapsed" Background="#FFF3E0" BorderBrush="DarkOrange"
                 BorderThickness="1" Padding="10" Margin="0,10,0,0">
             <StackPanel>
                 <TextBlock x:Name="ManualText" TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" />
@@ -79,7 +82,7 @@
         </Border>
 
         <!-- compose -->
-        <Grid Grid.Row="4" Margin="0,10,0,0">
+        <Grid Grid.Row="3" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -101,7 +104,7 @@
                     PreviewMouseLeftButtonDown="OnTalkDown" PreviewMouseLeftButtonUp="OnTalkUp" LostMouseCapture="OnTalkLost" />
         </Grid>
 
-        <!-- map view: covers the log and compose rows when "Map" is selected -->
-        <Border x:Name="MapHost" Grid.Row="2" Grid.RowSpan="3" Background="White" Visibility="Collapsed" />
+        <!-- map view: covers the log and compose rows (not the manual PTT panel) when "Map" is selected -->
+        <Border x:Name="MapHost" Grid.Row="2" Grid.RowSpan="2" Background="White" Visibility="Collapsed" />
     </Grid>
 </Window>

@@ -133,7 +133,7 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
     // any change to the form clears the last error, so it never describes an earlier state of the form
     LaunchedEffect(values.toMap()) { error = null }
     fun missing(f: FieldSpec) = !f.optional && f.kind in setOf("enum", "uint", "text", "latlon") && values[f.key].isNullOrBlank()
-    val red = Color(0xFFC62828)
+    val red = MaterialTheme.colorScheme.error
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -200,7 +200,7 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
                                 }
                             }
                             if (t.isNotBlank()) {
-                                if (parsed == null) Text("Cannot read this position", color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall)
+                                if (parsed == null) Text("Cannot read this position", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                 else Text("= %.5f, %.5f  %s".format(parsed[0], parsed[1], Native.geoFormat(parsed[0], parsed[1], 2)),
                                     style = MaterialTheme.typography.bodySmall)
                             }
@@ -215,7 +215,7 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
                         }
                     }
                 }
-                error?.let { Text(it, color = Color(0xFFC62828), modifier = Modifier.padding(top = 4.dp)) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
                 Text("Sent to everyone in range (CQ). Callsign and time are added automatically.", style = MaterialTheme.typography.bodySmall)
             }
         },
@@ -290,11 +290,22 @@ private fun MapPickerDialog(source: TileSource, start: Pair<Double, Double>?, on
     }
     DisposableEffect(Unit) { onDispose { Hub.camLat = saved.first; Hub.camLon = saved.second; Hub.camZoom = saved.third } }
 
-    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // decorFitsSystemWindows = false: the dialog window is laid out edge to edge, so safeDrawingPadding knows where the
+    // status and navigation bars are (otherwise, on Android 15, the bottom of a full-screen dialog runs off the screen).
+    Dialog(onDismissRequest = onCancel,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                Text("Move the map so the crosshairs are on the spot, or tap the spot.",
-                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+                // the answer and the buttons are at the top, where nothing can cover them
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Move the map so the crosshairs are on the spot, or tap the spot.", style = MaterialTheme.typography.bodyMedium)
+                    Text("%.5f, %.5f   %s".format(java.util.Locale.US, Hub.camLat, Hub.camLon, Native.geoFormat(Hub.camLat, Hub.camLon, 2)),
+                        style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                        Button(onClick = { onPick(Hub.camLat, Hub.camLon) }, modifier = Modifier.weight(1f)) { Text("Use this spot") }
+                    }
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     MapView(source, Hub.mapItems, Hub.position, onSelect = {}, onTapPoint = { lat, lon ->
                         Hub.camLat = lat; Hub.camLon = lon
@@ -313,16 +324,8 @@ private fun MapPickerDialog(source: TileSource, start: Pair<Double, Double>?, on
                         Button(onClick = { Hub.camZoom = (Hub.camZoom + 1f).coerceAtMost(source.maxZoom.toFloat()) }) { Text("+") }
                         Button(onClick = { Hub.camZoom = (Hub.camZoom - 1f).coerceAtLeast(2f) }) { Text("−") }
                     }
-                    Text(source.attribution, style = MaterialTheme.typography.labelSmall,
+                    Text(source.attribution, style = MaterialTheme.typography.labelSmall, color = Color.Black, // on a white box in both themes
                         modifier = Modifier.align(Alignment.BottomEnd).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp))
-                }
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("%.5f, %.5f   %s".format(java.util.Locale.US, Hub.camLat, Hub.camLon, Native.geoFormat(Hub.camLat, Hub.camLon, 2)),
-                        style = MaterialTheme.typography.bodyMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
-                        Button(onClick = { onPick(Hub.camLat, Hub.camLon) }, modifier = Modifier.weight(1f)) { Text("Use this spot") }
-                    }
                 }
             }
         }

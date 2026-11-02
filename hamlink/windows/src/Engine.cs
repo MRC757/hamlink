@@ -261,7 +261,7 @@ internal sealed class Engine
         radio = r;
         r.Message += OnMessage;
         r.Status += (id, st) => StatusChanged?.Invoke(id, st switch { 1 => "delivered", 2 => "sent", _ => "FAILED (no ACK)" });
-        r.Event += t => Log?.Invoke(LogKind.Event, t, -1, null);
+        r.Event += t => Log?.Invoke(t.StartsWith("WARNING") ? LogKind.Error : LogKind.Event, t, -1, null); // core warnings in red
 
         int startModem = s.Modem;
         if (!tnc && startModem != Radio.ModemAfsk && r.SetModem(startModem) != 0)
@@ -300,33 +300,21 @@ internal sealed class Engine
         Mode?.Invoke(Summary(startModem));
         ManualState?.Invoke(manual, "", 0);
 
-        WaveInEvent? cap = null;
+        RadioCapture? cap = null;
         Recorder? rec = s.RecordRx ? new Recorder(Fs) : null;
         try
         {
             if (inDev == -2 || outDev == -2) throw new InvalidOperationException("audio device not found");
-            cap = new WaveInEvent
-            {
-                DeviceNumber = inDev,
-                WaveFormat = new WaveFormat(Fs, 16, 1),
-                BufferMilliseconds = 20,
-                NumberOfBuffers = 6,
-            };
-            cap.DataAvailable += (_, e) =>
+            cap = RadioCapture.Open(inDev >= 0 ? ins[inDev] : null, inDev, Fs);
+            cap.Samples += a =>
             {
                 if (txActive) return;
-                int n = e.BytesRecorded / 2;
-                if (n <= 0) return;
-                var a = new short[n];
-                Buffer.BlockCopy(e.Buffer, 0, a, 0, n * 2);
                 rxq.Enqueue(a);
                 rxSignal.Release();
             };
-            cap.RecordingStopped += (_, e) =>
-            {
-                if (e.Exception != null) Log?.Invoke(LogKind.Error, $"audio capture stopped: {e.Exception.Message}", -1, null);
-            };
-            cap.StartRecording();
+            cap.Failed += e => Log?.Invoke(LogKind.Error, $"audio capture stopped: {e.Message}", -1, null);
+            cap.Start();
+            Log?.Invoke(LogKind.Event, cap.Description, -1, null);
             PhaseChanged?.Invoke(Phase.Idle, 0);
 
             int tick = 0;
@@ -443,7 +431,6 @@ internal sealed class Engine
         finally
         {
             running = false;
-            try { cap?.StopRecording(); } catch { }
             try { cap?.Dispose(); } catch { }
             try { rec?.Dispose(); } catch { }
             ptt.Dispose(); // also unkeys
