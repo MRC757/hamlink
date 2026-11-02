@@ -102,6 +102,8 @@ python3 tools/syntax_check.py           # Kotlin and C# syntax (no compiler)
 ```
 On Windows, `py tools/score_tnc_cd.py TRACK.flac` scores the receiver in the shipped `hamlink_core.dll` on any WAV/FLAC
 recording (needs numpy, scipy and soundfile; no compiler). Results on the WA8LMF TNC Test CD: `docs/DSP_IMPROVEMENTS.md`.
+`py tools/replay_wav.py FILE` replays a recording (for example one the Windows app saved with *Record received radio
+audio*) through every modem's receiver and lists the messages and reports that decode.
 
 ## Build the apps
 **Windows:** see `windows/README.md` (`windows/build.ps1`, or `dotnet publish`; builds with the .NET 8 or 9 SDK).

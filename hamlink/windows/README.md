@@ -76,6 +76,10 @@ service and serial GPS are untested.
 * Opening a serial port can pulse RTS/DTR for a few ms in some Windows drivers, which may blip the
   transmitter at app start. Start the app with the radio off or on a dummy load.
 * Settings are stored in `%AppData%\HamLink\settings.json`.
+* Settings > *Record received radio audio* saves what the radio hears to `%LOCALAPPDATA%\HamLink\recordings` (a new WAV
+  file at each Start and every 30 minutes; about 350 MB per hour; the oldest files are deleted above 1 GB; moments when
+  you transmit are skipped). `py tools/replay_wav.py <file>` replays a recording through every modem and shows what
+  decodes, which is the quickest way to diagnose a failed on-air test.
 * Relay mode: tick "Relay mode" on the hilltop PC. It re-sends frames not addressed to it and
   identifies itself after traffic and at least every 9 minutes. It stops auto-playing received voice.
 * Audio uses WinMM (MME) through NAudio so Windows handles sample-rate conversion for the 48 kHz

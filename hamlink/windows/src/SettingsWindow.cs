@@ -46,6 +46,12 @@ internal sealed class SettingsWindow : Window
     };
     readonly ComboBox sense = new();
     readonly CheckBox repair = new() { Content = "Repair single-bit errors in received frames", Margin = new Thickness(0, 6, 0, 0) };
+    readonly CheckBox record = new()
+    {
+        Content = "Record received radio audio to WAV files (for troubleshooting; about 350 MB per hour, oldest deleted above 1 GB)",
+        Margin = new Thickness(0, 6, 0, 0),
+        ToolTip = Recorder.Folder,
+    };
     static readonly (int Bytes, string Text)[] FecChoices =
     {
         (0, "Off (plain AX.25-style frames)"),
@@ -87,6 +93,7 @@ internal sealed class SettingsWindow : Window
         foreach (var t in SenseChoices) sense.Items.Add(t);
         sense.SelectedIndex = s.EffectiveCarrierSense;
         repair.IsChecked = s.BitRepair;
+        record.IsChecked = s.RecordRx;
         foreach (var f in FecChoices) fec.Items.Add(f.Text);
         fec.SelectedIndex = Math.Max(0, Array.FindIndex(FecChoices, f => f.Bytes == s.AfskFec));
         link.Items.Add(LinkAudioText); link.Items.Add(LinkTncText);
@@ -123,6 +130,7 @@ internal sealed class SettingsWindow : Window
         Row(audioSection, manualLabel, manualSecs);
         Row(audioSection, "Carrier sense (wait while the channel is in use)", sense);
         audioSection.Children.Add(repair);
+        audioSection.Children.Add(record);
         Row(audioSection, preLabel, pre);
         Row(audioSection, txLabel, tx);
         Row(audioSection, busyLabel, busy);
@@ -254,6 +262,7 @@ internal sealed class SettingsWindow : Window
         s.CarrierSenseMode = Math.Max(0, sense.SelectedIndex);
         s.CarrierSense = s.CarrierSenseMode != 0;
         s.BitRepair = repair.IsChecked == true;
+        s.RecordRx = record.IsChecked == true;
         s.AfskFec = FecChoices[Math.Max(0, fec.SelectedIndex)].Bytes;
         s.Ttl = (int)ttl.Value;
         s.PreambleMs = (int)pre.Value;

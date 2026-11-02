@@ -19,6 +19,10 @@ Link, PTT, audio and carrier-sense changes apply after Stop, then Start.
 You need an amateur licence for anything that transmits. Use a simplex frequency you may use, low power, and
 identify as the rules require. No encryption.
 
+**Record what the receiving station hears** (Windows: Settings > *Record received radio audio*). Each Start begins a
+WAV file in `%LOCALAPPDATA%\HamLink\recordings`. When a test fails, the recording shows why: replay it through every
+modem with `py tools/replay_wav.py <file>` (see the main README), or send it with your report.
+
 ---
 
 ## Stage 0: two devices, no radios

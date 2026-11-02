@@ -37,6 +37,8 @@ internal sealed class Settings
     public int CarrierSenseMode { get; set; } = -1;
     /// <summary>Repair AFSK frames with a single wrong bit (default on).</summary>
     public bool BitRepair { get; set; } = true;
+    /// <summary>Save received radio audio to WAV files (Recorder.Folder) for troubleshooting and offline replay.</summary>
+    public bool RecordRx { get; set; }
     /// <summary>FX.25 error correction on transmitted AFSK frames: 0 off, or 16/32/64 Reed-Solomon check bytes. Receiving is always on.</summary>
     public int AfskFec { get; set; } = 16;
     public int EffectiveCarrierSense => CarrierSenseMode is >= 0 and <= 2 ? CarrierSenseMode : (CarrierSense ? 2 : 0);

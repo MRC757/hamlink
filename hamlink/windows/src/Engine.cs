@@ -301,6 +301,7 @@ internal sealed class Engine
         ManualState?.Invoke(manual, "", 0);
 
         WaveInEvent? cap = null;
+        Recorder? rec = s.RecordRx ? new Recorder(Fs) : null;
         try
         {
             if (inDev == -2 || outDev == -2) throw new InvalidOperationException("audio device not found");
@@ -351,6 +352,21 @@ internal sealed class Engine
                 {
                     level = r.Process(chunk, chunk.Length, Now(), busyThr);
                     any = true;
+                    if (rec != null)
+                    {
+                        try
+                        {
+                            string? opened = rec.Write(chunk, chunk.Length);
+                            if (opened != null) Log?.Invoke(LogKind.Event, $"Recording received audio to {opened}", -1, null);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.LogError("recording", ex);
+                            Log?.Invoke(LogKind.Error, $"recording stopped: {ex.Message}", -1, null);
+                            rec.Dispose();
+                            rec = null;
+                        }
+                    }
                 }
                 while (rxSignal.CurrentCount > 0) rxSignal.Wait(0);
                 if (!any) level = r.Process(Array.Empty<short>(), 0, Now(), busyThr); // run timers
@@ -429,6 +445,7 @@ internal sealed class Engine
             running = false;
             try { cap?.StopRecording(); } catch { }
             try { cap?.Dispose(); } catch { }
+            try { rec?.Dispose(); } catch { }
             ptt.Dispose(); // also unkeys
             r.Dispose();
             radio = null;
