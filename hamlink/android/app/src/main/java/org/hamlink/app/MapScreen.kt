@@ -44,6 +44,7 @@ fun MapScreen(settings: Settings) {
     val ctx = LocalContext.current
     val source = remember(settings.tileUrl, settings.tileOnline) { HttpTileSource(ctx.applicationContext, settings) }
     var showReport by remember { mutableStateOf(false) }
+    var reportAt by remember { mutableStateOf<Pair<Double, Double>?>(null) } // set by a long-press on the map
     var showSettings by remember { mutableStateOf(false) }
     val running = Hub.phase != Hub.Phase.OFF
 
@@ -55,6 +56,10 @@ fun MapScreen(settings: Settings) {
                 Hub.selectedKey = key
                 Hub.selectedDetail = null
                 if (key != null) RadioService.engine?.detail(key)
+            }, onLongPress = { lat, lon ->
+                // like right-click on Windows: report about the spot under the finger
+                if (running) { reportAt = lat to lon; showReport = true }
+                else Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Start the radio to send a report"))
             })
             // zoom and recentre buttons
             Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -71,17 +76,18 @@ fun MapScreen(settings: Settings) {
 
         Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Hub.selectedDetail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (running) Text("Long-press the map to report on that spot", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             Text(Hub.positionStatus, style = MaterialTheme.typography.bodySmall,
                 color = if (Hub.position == null) Color(0xFFEF6C00) else MaterialTheme.colorScheme.primary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = running && Hub.position != null, modifier = Modifier.weight(1f),
                     onClick = { RadioService.engine?.sendPosition() }) { Text("Send my position") }
-                Button(enabled = running, modifier = Modifier.weight(1f), onClick = { showReport = true }) { Text("New report") }
+                Button(enabled = running, modifier = Modifier.weight(1f), onClick = { reportAt = null; showReport = true }) { Text("New report") }
                 OutlinedButton(onClick = { showSettings = true }) { Text("Map setup") }
             }
         }
     }
-    if (showReport) ReportDialog(onClose = { showReport = false })
+    if (showReport) ReportDialog(source, at = reportAt, onClose = { showReport = false })
     if (showSettings) MapSetupDialog(settings, onClose = { showSettings = false })
 }
 

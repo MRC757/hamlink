@@ -70,22 +70,25 @@ lower case is converted to upper case, and anything else is refused with a messa
 ## Station SITREP
 A short status report about the **operator's own station and area**, broadcast to everyone in range (CQ). Every field is a
 drop-down. It carries no position and is not drawn on the map: receivers see a one-line summary in the message log, such
-as `B: moderate disruptions / VA / H: home`, and the full list in the report details. A typical SITREP is about 5 bytes of
-payload. Open it from **New report...** and choose *Station SITREP* (Windows: Map view; the radio must be running).
+as `B: moderate disruptions / H: home`, and the full list in the report details. A typical SITREP is about 4 bytes of
+payload. Open it from **New report...** and choose *Station SITREP* (the radio must be running).
 
 | Field | Key | Choices |
 |---|---|---|
 | 1. Conditions at operator's location | `cond` | A: all stable, B: moderate disruptions, C: severe disruptions |
-| 2. Operator's location by state | `state` | US postal codes, DC, AS, GU, MP, PR, VI, or "Other (outside US)" |
-| 3. Operator's position | `pos` | H: home, M: mobile, P: portable |
-| 4. Commercial power | `power` | Y: yes, I: intermittent, N: no |
-| 5. Water | `water` | Y: yes, C: contaminated, N: no |
-| 6. Sanitation | `sanitation` | Y: yes, N: no |
-| 7. Medical | `medical` | Y: yes, N: no |
-| 8. Grid communications | `comms` | Y: yes, N: no |
-| 9. Transportation | `transport` | Y: yes, N: no |
+| 2. Operator's position | `pos` | H: home, M: mobile, P: portable |
+| 3. Commercial power | `power` | Y: yes, I: intermittent, N: no |
+| 4. Water | `water` | Y: yes, C: contaminated, N: no |
+| 5. Sanitation | `sanitation` | Y: yes, N: no |
+| 6. Medical | `medical` | Y: yes, N: no |
+| 7. Grid communications | `comms` | Y: yes, N: no |
+| 8. Transportation | `transport` | Y: yes, N: no |
 
-Fields 1-3 are required. Fields 4-9 are optional and may be left at "(not set)" when all is OK and all services are available.
+Fields 1-2 are required. Fields 3-8 are optional and may be left at "(not set)" when all is OK and all services are available.
+
+Version 2 (after HamLink 0.2.0) dropped the "location by state" field of version 1: it came from an HF long-distance
+net format and is not needed on a local VHF/UHF channel. Versions 1 and 2 cannot read each other's SITREPs (shown as a
+version mismatch), so all stations should run a build newer than 0.2.0.
 
 ## Maps and tiles
 * The map is drawn from standard OpenStreetMap-style raster tiles (`{z}/{x}/{y}.png`).

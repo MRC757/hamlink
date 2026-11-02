@@ -18,6 +18,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -56,6 +64,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun App() {
     val ctx = LocalContext.current
@@ -88,16 +97,34 @@ private fun App() {
     }
 
     val on = Hub.phase != Hub.Phase.OFF
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        // ---- header
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()) {
-            Column {
-                Text(settings.callsign.ifEmpty { "set callsign" }, style = MaterialTheme.typography.titleLarge)
-                Text(Hub.audioRoute, style = MaterialTheme.typography.bodySmall)
-                Text(Hub.pttInfo, style = MaterialTheme.typography.bodySmall)
-                if (Hub.modeSummary.isNotEmpty()) Text(Hub.modeSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    // While the on-screen keyboard is up only the message list and the compose box are shown, so the text being
+    // typed and the latest messages are not squeezed out by the header (the keyboard takes about half the screen).
+    val typing = WindowInsets.isImeVisible && tab == 0
+    // Android 15 draws apps edge to edge: keep clear of the status bar, navigation bar and keyboard.
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
+        if (typing) {
+            val (label, color) = when (Hub.phase) {
+                Hub.Phase.OFF -> "OFF" to Color.Gray
+                Hub.Phase.IDLE -> "LISTENING" to Color(0xFF2E7D32)
+                Hub.Phase.BUSY -> "CHANNEL BUSY" to Color(0xFFEF6C00)
+                Hub.Phase.TX -> "TRANSMITTING" to Color(0xFFC62828)
             }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                Text(settings.callsign, style = MaterialTheme.typography.titleSmall)
+                Box(Modifier.width(8.dp))
+                Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.background(color).padding(horizontal = 6.dp, vertical = 2.dp))
+                if (on && Hub.manualMode && Hub.manualPending > 0) {
+                    Box(Modifier.width(8.dp))
+                    Text("${Hub.manualPending} waiting to transmit", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        } else {
+        // ---- header: callsign and buttons on one row, status lines below at full width, so long status text can
+        // never push the buttons off screen
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(settings.callsign.ifEmpty { "set callsign" }, style = MaterialTheme.typography.titleLarge,
+                maxLines = 1, modifier = Modifier.weight(1f))
             Row {
                 OutlinedButton(onClick = { showSettings = true }) { Text("Settings") }
                 Box(Modifier.width(8.dp))
@@ -110,6 +137,9 @@ private fun App() {
                 Button(onClick = { if (on) RadioService.stop(ctx) else startRadio() }) { Text(if (on) "Stop" else "Start") }
             }
         }
+        if (Hub.audioRoute.isNotEmpty()) Text(Hub.audioRoute, style = MaterialTheme.typography.bodySmall)
+        if (Hub.pttInfo.isNotEmpty()) Text(Hub.pttInfo, style = MaterialTheme.typography.bodySmall)
+        if (Hub.modeSummary.isNotEmpty()) Text(Hub.modeSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
             val (label, color) = when (Hub.phase) {
                 Hub.Phase.OFF -> "OFF" to Color.Gray
@@ -166,6 +196,7 @@ private fun App() {
             FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Messages") })
             FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("Map") })
         }
+        } // !typing
         if (tab == 1) {
             Box(Modifier.weight(1f).fillMaxWidth()) { MapScreen(settings) }
         } else {
@@ -196,7 +227,13 @@ private fun App() {
             OutlinedTextField(dest, { dest = it.uppercase().take(8); settings.dest = dest }, label = { Text("To") },
                 singleLine = true, modifier = Modifier.width(110.dp))
             Box(Modifier.width(8.dp))
-            OutlinedTextField(text, { text = it }, label = { Text("Message") }, modifier = Modifier.weight(1f))
+            // grows to 4 lines as you type; the keyboard's Send key sends
+            OutlinedTextField(text, { text = it }, label = { Text("Message") }, modifier = Modifier.weight(1f),
+                minLines = 1, maxLines = 4,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = {
+                    if (on && text.isNotBlank() && dest.isNotBlank()) { RadioService.engine?.sendText(dest, text.trim()); text = "" }
+                }))
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = on && text.isNotBlank() && dest.isNotBlank(), modifier = Modifier.weight(1f), onClick = {
@@ -225,7 +262,13 @@ private fun App() {
 
     if (showSettings) SettingsDialog(settings,
         requestBt = { if (Build.VERSION.SDK_INT >= 31) btPerm.launch(Manifest.permission.BLUETOOTH_CONNECT) },
-        onDone = { showSettings = false })
+        onDone = {
+            showSettings = false
+            if (on) {   // settings are read at engine start: apply them now instead of after a manual Stop > Start
+                RadioService.restartEngine(ctx)
+                Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Settings saved: radio restarted with the new settings"))
+            }
+        })
     if (showCal) CalibrationDialog(settings, onClose = { showCal = false })
 }
 
@@ -347,7 +390,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                     Row(verticalAlignment = Alignment.CenterVertically) { Switch(repair, { repair = it }); Box(Modifier.width(8.dp)); Text("Repair single-bit errors in received frames") }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }); Box(Modifier.width(8.dp)); Text("Auto-play received voice") }
-                Text("Changes apply after Stop > Start.", style = MaterialTheme.typography.bodySmall)
+                Text("If the radio is running, Save restarts it with the new settings.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {

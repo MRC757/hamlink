@@ -1,33 +1,54 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package org.hamlink.app
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.json.JSONObject
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -81,23 +102,38 @@ private val AGO = listOf(0 to "Just now", 5 to "5 min ago", 15 to "15 min ago", 
 private fun colorOf(hex: String?): Color? =
     try { hex?.let { Color(android.graphics.Color.parseColor(it)) } } catch (_: IllegalArgumentException) { null }
 
-/** Dialog that builds and sends one report of any schema in [Schemas.forms]. */
+private fun fmt(lat: Double, lon: Double) = "%.5f,%.5f".format(java.util.Locale.US, lat, lon)
+
+/** Enum fields with more choices than this are a drop-down list instead of a wall of chips. */
+private const val CHIP_LIMIT = 8
+
+/**
+ * Dialog that builds and sends one report of any schema in [Schemas.forms].
+ * [at] (from a long-press on the map) pre-fills the report's position; otherwise it starts at the operator's position.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ReportDialog(onClose: () -> Unit) {
+fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: () -> Unit) {
     val forms = Schemas.forms
     if (forms.isEmpty()) { onClose(); return }
-    var schema by remember { mutableStateOf(forms[0]) }
+    // a report about a map spot opens on the first form that has a position (SALUTE)
+    var schema by remember { mutableStateOf(if (at != null) forms.firstOrNull { s -> s.fields.any { it.kind == "latlon" } } ?: forms[0] else forms[0]) }
     val values = remember(schema) {
         mutableStateMapOf<String, String>().also { m ->
             for (f in schema.fields) when (f.kind) {
-                "latlon" -> Hub.position?.let { m[f.key] = "%.5f,%.5f".format(it.lat, it.lon) }
+                "latlon" -> (at ?: Hub.position?.let { it.lat to it.lon })?.let { (lat, lon) -> m[f.key] = fmt(lat, lon) }
                 "time" -> m[f.key] = "0"
             }
         }
     }
     var error by remember { mutableStateOf<String?>(null) }
+    var tried by remember(schema) { mutableStateOf(false) } // after a failed Send, missing fields are shown in red
     var sending by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf<String?>(null) } // key of the position field being picked on the map
+    // any change to the form clears the last error, so it never describes an earlier state of the form
+    LaunchedEffect(values.toMap()) { error = null }
+    fun missing(f: FieldSpec) = !f.optional && f.kind in setOf("enum", "uint", "text", "latlon") && values[f.key].isNullOrBlank()
+    val red = Color(0xFFC62828)
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -109,9 +145,14 @@ fun ReportDialog(onClose: () -> Unit) {
                 }
                 for (f in schema.fields) {
                     val label = f.label + if (f.optional) " (optional)" else ""
+                    val bad = tried && missing(f)
                     when (f.kind) {
-                        "enum" -> {
-                            Text(label, style = MaterialTheme.typography.labelLarge)
+                        "enum" -> if (f.values.size > CHIP_LIMIT) {
+                            EnumDropdown(label, f.values.map { it.name }, values[f.key], f.optional, bad) { pick ->
+                                if (pick == null) values.remove(f.key) else values[f.key] = pick
+                            }
+                        } else {
+                            Text(label, style = MaterialTheme.typography.labelLarge, color = if (bad) red else Color.Unspecified)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 f.values.forEach { v ->
                                     val on = values[f.key] == v.name
@@ -140,21 +181,22 @@ fun ReportDialog(onClose: () -> Unit) {
                         }
                         "uint" -> OutlinedTextField(
                             values[f.key] ?: "", { t -> values[f.key] = t.filter { it.isDigit() }.take(5) },
-                            label = { Text("$label, 0 to ${f.max}") }, singleLine = true,
+                            label = { Text("$label, 0 to ${f.max}") }, singleLine = true, isError = bad,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
                         "text" -> OutlinedTextField(
                             values[f.key] ?: "", { t -> values[f.key] = t.uppercase().take(f.max) },
-                            label = { Text("$label, up to ${f.max} characters") }, singleLine = true,
+                            label = { Text("$label, up to ${f.max} characters") }, singleLine = true, isError = bad,
                         )
                         "latlon" -> {
                             val t = values[f.key] ?: ""
-                            OutlinedTextField(t, { values[f.key] = it }, label = { Text(label) }, singleLine = true,
+                            OutlinedTextField(t, { values[f.key] = it }, label = { Text(label) }, singleLine = true, isError = bad,
                                 placeholder = { Text("lat,lon  or  FN31pr  or  MGRS") })
                             val parsed = if (t.isBlank()) null else Native.geoParse(t)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { picking = f.key }) { Text("Pick on map") }
                                 Hub.position?.let { p ->
-                                    OutlinedButton(onClick = { values[f.key] = "%.5f,%.5f".format(p.lat, p.lon) }) { Text("Use my position") }
+                                    OutlinedButton(onClick = { values[f.key] = fmt(p.lat, p.lon) }) { Text("Use my position") }
                                 }
                             }
                             if (t.isNotBlank()) {
@@ -181,6 +223,12 @@ fun ReportDialog(onClose: () -> Unit) {
             TextButton(enabled = !sending, onClick = {
                 val eng = RadioService.engine
                 if (eng == null) { error = "Start the radio first (Messages tab, Start)."; return@TextButton }
+                val gaps = schema.fields.filter { missing(it) }
+                if (gaps.isNotEmpty()) {
+                    tried = true
+                    error = "Still needed: " + gaps.joinToString("; ") { it.label }
+                    return@TextButton
+                }
                 val nowS = System.currentTimeMillis() / 1000
                 val kv = StringBuilder()
                 for (f in schema.fields) {
@@ -197,4 +245,86 @@ fun ReportDialog(onClose: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
+
+    picking?.let { key ->
+        val start = values[key]?.takeIf { it.isNotBlank() }?.let { Native.geoParse(it) }?.let { it[0] to it[1] }
+        MapPickerDialog(source, start, onCancel = { picking = null }, onPick = { lat, lon ->
+            values[key] = fmt(lat, lon)
+            picking = null
+        })
+    }
+}
+
+/** Drop-down for an enum field with many choices (e.g. the SITREP state list). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EnumDropdown(label: String, choices: List<String>, value: String?, optional: Boolean, isError: Boolean,
+                         onPick: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value ?: "", {}, readOnly = true, singleLine = true, isError = isError,
+            label = { Text(label) }, placeholder = { Text("Choose…") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (optional) DropdownMenuItem(text = { Text("(none)") }, onClick = { onPick(null); open = false })
+            choices.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onPick(c); open = false }) }
+        }
+    }
+}
+
+/**
+ * Full-screen map for choosing a report's position: the spot under the crosshairs is the answer. Drag to move the map,
+ * or tap a spot to bring it to the crosshairs. The main map's view is restored afterwards.
+ */
+@Composable
+private fun MapPickerDialog(source: TileSource, start: Pair<Double, Double>?, onCancel: () -> Unit,
+                            onPick: (Double, Double) -> Unit) {
+    val saved = remember { Triple(Hub.camLat, Hub.camLon, Hub.camZoom) }
+    remember {
+        val p = start ?: Hub.position?.let { it.lat to it.lon }
+        if (p != null) { Hub.camLat = p.first; Hub.camLon = p.second; if (Hub.camZoom < 13f) Hub.camZoom = 15f }
+        0
+    }
+    DisposableEffect(Unit) { onDispose { Hub.camLat = saved.first; Hub.camLon = saved.second; Hub.camZoom = saved.third } }
+
+    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Text("Move the map so the crosshairs are on the spot, or tap the spot.",
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    MapView(source, Hub.mapItems, Hub.position, onSelect = {}, onTapPoint = { lat, lon ->
+                        Hub.camLat = lat; Hub.camLon = lon
+                    })
+                    Canvas(Modifier.size(56.dp).align(Alignment.Center)) {
+                        val c = center; val r = size.minDimension / 2f; val w = 2.dp.toPx()
+                        for ((col, sw) in listOf(Color.White to w * 2.5f, Color(0xFFC62828) to w)) {
+                            drawLine(col, Offset(c.x - r, c.y), Offset(c.x - r * 0.25f, c.y), sw)
+                            drawLine(col, Offset(c.x + r * 0.25f, c.y), Offset(c.x + r, c.y), sw)
+                            drawLine(col, Offset(c.x, c.y - r), Offset(c.x, c.y - r * 0.25f), sw)
+                            drawLine(col, Offset(c.x, c.y + r * 0.25f), Offset(c.x, c.y + r), sw)
+                            drawCircle(col, r * 0.5f, c, style = Stroke(sw))
+                        }
+                    }
+                    Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { Hub.camZoom = (Hub.camZoom + 1f).coerceAtMost(source.maxZoom.toFloat()) }) { Text("+") }
+                        Button(onClick = { Hub.camZoom = (Hub.camZoom - 1f).coerceAtLeast(2f) }) { Text("−") }
+                    }
+                    Text(source.attribution, style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.BottomEnd).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp))
+                }
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("%.5f, %.5f   %s".format(java.util.Locale.US, Hub.camLat, Hub.camLon, Native.geoFormat(Hub.camLat, Hub.camLon, 2)),
+                        style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                        Button(onClick = { onPick(Hub.camLat, Hub.camLon) }, modifier = Modifier.weight(1f)) { Text("Use this spot") }
+                    }
+                }
+            }
+        }
+    }
 }

@@ -25,6 +25,22 @@ class RadioService : Service() {
         fun stop(ctx: Context) {
             ctx.stopService(Intent(ctx, RadioService::class.java))
         }
+
+        /**
+         * Settings (relay hops, carrier sense, PTT, preamble...) are read when the engine starts, so after Save the
+         * running engine is replaced by a new one. Off the UI thread: stopping waits for the engine thread.
+         */
+        fun restartEngine(ctx: Context) {
+            val old = engine ?: return
+            val app = ctx.applicationContext
+            Thread {
+                old.stop()
+                synchronized(RadioService::class.java) {
+                    // the user may have pressed Stop meanwhile: then the service is gone and nothing restarts
+                    if (engine === old) engine = Engine(app).also { it.start() }
+                }
+            }.start()
+        }
     }
 
     private var wake: PowerManager.WakeLock? = null
@@ -54,16 +70,16 @@ class RadioService : Service() {
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "hamlink:engine").apply { acquire() }
         }
         Positions.apply(applicationContext)
-        if (engine == null) {
-            engine = Engine(applicationContext).also { it.start() }
+        synchronized(RadioService::class.java) {
+            if (engine == null) engine = Engine(applicationContext).also { it.start() }
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
         Positions.stop()
-        engine?.stop()
-        engine = null
+        val e = synchronized(RadioService::class.java) { engine.also { engine = null } }
+        e?.stop()
         wake?.let { if (it.isHeld) it.release() }
         wake = null
         super.onDestroy()

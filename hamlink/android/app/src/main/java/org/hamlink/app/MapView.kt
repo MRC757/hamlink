@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -62,7 +63,13 @@ private fun parseColor(hex: String): Color =
  * Drawing is separate from tile loading ([TileSource]) and from what the icons mean ([MapItem] comes from the core).
  */
 @Composable
-fun MapView(source: TileSource, items: List<MapItem>, me: Fix?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+fun MapView(
+    source: TileSource, items: List<MapItem>, me: Fix?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier,
+    /** Long-press: the map position under the finger (lat, lon). */
+    onLongPress: ((Double, Double) -> Unit)? = null,
+    /** If set, a tap reports the map position under the finger instead of selecting an icon. */
+    onTapPoint: ((Double, Double) -> Unit)? = null,
+) {
     var redraw by remember { mutableIntStateOf(0) }
     DisposableEffect(source) {
         source.onChange = { redraw++ }
@@ -74,10 +81,13 @@ fun MapView(source: TileSource, items: List<MapItem>, me: Fix?, onSelect: (Strin
     // which would otherwise cancel a tap in progress.
     val currentItems by rememberUpdatedState(items)
     val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val currentOnTapPoint by rememberUpdatedState(onTapPoint)
 
     Canvas(
         modifier = modifier
             .fillMaxSize()
+            .clipToBounds() // tiles straddle the edges; without this they paint over the controls above the map
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, pan, zoomChange, _ ->
                     val z0 = Hub.camZoom.toDouble()
@@ -100,7 +110,20 @@ fun MapView(source: TileSource, items: List<MapItem>, me: Fix?, onSelect: (Strin
                 }
             }
             .pointerInput(Unit) {
-                detectTapGestures { tap ->
+                // screen point -> (lat, lon) at the current camera
+                fun where(p: Offset): Pair<Double, Double> {
+                    val z = Hub.camZoom.toDouble()
+                    val wx = Mercator.x(Hub.camLon, z) + (p.x - size.width / 2.0)
+                    val wy = (Mercator.y(Hub.camLat, z) + (p.y - size.height / 2.0)).coerceIn(0.0, Mercator.worldSize(z))
+                    var lon = Mercator.lon(wx, z)
+                    while (lon > 180.0) lon -= 360.0
+                    while (lon < -180.0) lon += 360.0
+                    return Mercator.lat(wy, z) to lon
+                }
+                detectTapGestures(onLongPress = { p ->
+                    currentOnLongPress?.let { f -> val (lat, lon) = where(p); f(lat, lon) }
+                }) { tap ->
+                    currentOnTapPoint?.let { f -> val (lat, lon) = where(tap); f(lat, lon); return@detectTapGestures }
                     val z = Hub.camZoom.toDouble()
                     val cx = Mercator.x(Hub.camLon, z)
                     val cy = Mercator.y(Hub.camLat, z)

@@ -4,10 +4,11 @@ Text and voice-clip messaging over cheap handheld VHF/UHF FM radios (Baofeng UV-
 Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT. Includes a simplex store-and-forward relay
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
-> **Review build 0.2.0 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
-> The **Windows app now compiles and runs on Windows 11** (see *Status* below). The Android app **now compiles to an APK** but
-> has **never been run on a phone**; nothing has been tried on a real radio. Build errors and crashes, with the exact error
-> text, are the most useful feedback at this stage.
+> **Review build 0.2.1 (2026-11-02).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
+> The **Windows app runs on Windows 11** and the **Android app runs on a phone**; the two have exchanged messages, reports
+> and relayed traffic by acoustic coupling (phone held near the laptop, no radio). Nothing has been tried on a real radio yet.
+> Downloads for both are on the [Releases](https://github.com/MRC757/hamlink/releases) page. Crashes and errors, with the
+> exact error text, are the most useful feedback at this stage.
 
 * Two ways to reach the radio: **audio + PTT** (a DigiRig or sound card, works with any FM handheld) or a
   **KISS TNC over Bluetooth/serial** (radios with a built-in TNC, e.g. BTECH UV-PRO / Vero VR-N76, or a
@@ -38,8 +39,8 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   map tiles are cached on the device. Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
   On Windows, right-click a point on the map to start a report at that location.
-* **Station SITREP**: a nine-field drop-down status report about your own station and area (conditions, state, home/
-  mobile/portable, power, water, sanitation, medical, grid communications, transportation), about 5 bytes on the air.
+* **Station SITREP**: an eight-field drop-down status report about your own station and area (conditions, home/
+  mobile/portable, power, water, sanitation, medical, grid communications, transportation), about 4 bytes on the air.
   See `docs/MAPS_AND_REPORTS.md` and `docs/EXTENDING.md`.
 * Amateur radio only: callsign required, no encryption, publicly documented protocol.
 
@@ -225,11 +226,18 @@ version 7, 46 exports) imports only the Universal CRT and KERNEL32.
 Android app (2026-11-02): built for the first time, with JDK 17, AGP 8.7.3 and NDK 27, into a 13 MB debug APK for
 arm64-v8a, armeabi-v7a and x86_64. It compiled with no Kotlin errors or warnings, including the NDK build of the C++
 OFDM and MT63 modems, and all 38 Kotlin `external` functions match the JNI library's exports. It offers the same five
-modems and FX.25 setting as Windows. **It has not been run on a phone or emulator.**
+modems and FX.25 setting as Windows.
 
-**Not verified**: the Android app running at all (Compose canvas drawing, gesture handling, `LocationManager`, its map and
-report form, permissions); on Windows, the location service (`Geolocator`), serial GPS, the tile disk cache when offline,
-voice clips, Test / Calibrate, KISS TNC mode, and two copies of the app exchanging messages; the apps' audio, Bluetooth
+On-air by acoustic coupling (2026-11-02, Android 15 phone and a Windows 11 laptop, phone mic/speaker near the laptop's):
+the Android app runs (map, GPS position, SALUTE and SITREP forms, settings); text in both directions with **MT63-2000**
+and **OFDM**; a CQ message from the phone **relayed by the laptop**. **AFSK 1200** and **PSK** failed at arm's length.
+A room model (`speaker -> echoes -> mic`, all five modems) reproduces this: every modem decodes every message within
+about 10 cm of the speaker or through a cable, but room echo defeats AFSK and PSK beyond about 30 cm while MT63 still
+works at 1 m. So use an audio cable (DigiRig) for AFSK and PSK; acoustic coupling is only a quick check.
+
+**Not verified**: on Android, USB audio and the USB-serial PTT line, the Bluetooth TNC link, voice clips; on Windows,
+the location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips, Test / Calibrate, KISS
+TNC mode; the apps' audio, Bluetooth
 and USB-serial behaviour with real hardware, and **nothing has touched a real radio**. In particular: Bluetooth SPP/virtual-COM connection to a
 real UV-PRO-class radio (based on third-party descriptions of how it works, not on a test), whether such a
 radio accepts these AX.25 frames as-is, FM limiter/pre-emphasis/squelch behaviour in the audio path, PTT
@@ -240,9 +248,9 @@ see `third_party/aicodix/`). Rattlegram snapshot used: aicodix/rattlegram commit
 
 ## Known issues and open questions
 Things a reviewer may trip over, roughly in order of how likely they are to matter:
-1. **Android first run.** The Android app compiles but has never run. Likely trouble spots: runtime permissions,
-   USB audio routing, the Compose map view, and the foreground service. The Windows app builds and runs; its untested
-   parts are listed under *Status* above.
+1. **Android with real hardware.** The Android app runs and has exchanged messages acoustically, but USB audio routing
+   (DigiRig), the USB-serial PTT line and the Bluetooth TNC link are untested. The untested parts of both apps are
+   listed under *Status* above.
 2. **Broadcast reports are not acknowledged.** On a lossy link a report can be lost without the sender knowing. Map setup >
    *Repeat my reports* (off by default) sends 1 or 2 extra copies about 30 s apart (plus random spread); receivers drop the
    copies. Each copy is a transmission.
