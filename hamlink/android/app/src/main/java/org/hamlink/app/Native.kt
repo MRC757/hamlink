@@ -23,10 +23,41 @@ object Native {
     // ---- modem and link choice ----
     const val MODEM_AFSK = 0    // 1200 baud Bell 202 AFSK (default)
     const val MODEM_OFDM = 1    // COFDMTV (Rattlegram family): about 4-6 dB more sensitive in simulation
+    const val MODEM_MT63 = 2    // MT63-2000: slow but robust
+    const val MODEM_PSK2400 = 3 // QPSK, 1200 baud: about twice the throughput of AFSK
+    const val MODEM_PSK3600 = 4 // 8-PSK: fastest, needs a strong signal (PSK 2400 and 3600 stations hear each other)
     const val LINK_AUDIO = 0    // sound card/USB audio + PTT
     const val LINK_TNC = 1      // radio with a built-in KISS TNC over Bluetooth SPP
-    /** Returns 0, or -1 if OFDM could not start (AFSK stays selected). All stations must use the same modem. */
+
+    /** Short labels for chips, in modem-number order. */
+    val MODEM_LABELS = listOf("AFSK 1200", "OFDM", "MT63-2000", "PSK 2400", "PSK 3600")
+    fun modemName(modem: Int) = when (modem) {
+        MODEM_OFDM -> "OFDM (COFDMTV)"
+        MODEM_MT63 -> "MT63-2000 (slow but robust)"
+        MODEM_PSK2400 -> "PSK 2400 (QPSK)"
+        MODEM_PSK3600 -> "PSK 3600 (8-PSK)"
+        else -> "AFSK 1200 baud"
+    }
+    /** One-paragraph explanation for the settings screen. */
+    fun modemNote(modem: Int) = when (modem) {
+        MODEM_OFDM -> "OFDM (COFDMTV, as in Rattlegram): decodes about 4-6 dB deeper into the noise than AFSK in simulation, " +
+            "but is not faster. Lower the PTT lead-in to about 200 ms to save airtime."
+        MODEM_MT63 -> "MT63-2000 is slow but robust: about 7 times the airtime of AFSK (a short message takes ~10 s, every " +
+            "transmission adds ~5 s), but in simulation it decoded at -4 dB SNR, where AFSK needs about +6 dB. For weak, " +
+            "noisy or fading paths."
+        MODEM_PSK2400 -> "PSK 2400 (QPSK): about twice the throughput of AFSK and, in simulation, about as robust (down to " +
+            "~6 dB SNR). PSK 2400 and 3600 stations hear each other."
+        MODEM_PSK3600 -> "PSK 3600 (8-PSK): the fastest choice, about 2.4 times AFSK, but it needs a strong, clean signal " +
+            "(above ~10 dB SNR in simulation). Drop to PSK 2400 if messages need retries."
+        else -> "AFSK 1200: simple and interoperable with packet-radio tools."
+    }
+
+    /** Returns 0, or -1 if the modem could not start (AFSK stays selected). All stations must use the same modem. */
     external fun setModem(modem: Int): Int
+    /** FX.25 error correction on transmitted AFSK frames: 0 off, or 16/32/64 check bytes. Receiving is always on. */
+    external fun setFec(checkBytes: Int): Int
+    /** out3 = {FX.25 blocks decoded, frames only FEC recovered, bytes corrected} */
+    external fun getFecInfo(out3: IntArray)
     external fun setLink(link: Int, tncBaud: Int)
     /** True when a human keys the radio for every transmission: stretches ACK/retry timers to 45 s. */
     external fun setManualPtt(on: Boolean)

@@ -8,3 +8,4 @@ windows/bin/
 windows/obj/
 windows/publish/
 build-win/
+android/app/.cxx/

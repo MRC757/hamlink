@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -128,14 +129,15 @@ private fun App() {
 
         // ---- live modem switch (audio link only): handy for A/B tests without restarting
         if (settings.transport != "tnc") {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // five modems do not fit a phone-width row: scroll sideways
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Text("Modem:")
-                FilterChip(selected = modemSel == 0, label = { Text("AFSK 1200") }, onClick = {
-                    modemSel = 0; settings.modem = 0; RadioService.engine?.setModem(0)
-                })
-                FilterChip(selected = modemSel == 1, label = { Text("OFDM") }, onClick = {
-                    modemSel = 1; settings.modem = 1; RadioService.engine?.setModem(1)
-                })
+                Native.MODEM_LABELS.forEachIndexed { m, label ->
+                    FilterChip(selected = modemSel == m, label = { Text(label) }, onClick = {
+                        modemSel = m; settings.modem = m; RadioService.engine?.setModem(m)
+                    })
+                }
                 Text("(all stations must match)", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -243,6 +245,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
     var repair by remember { mutableStateOf(s.bitRepair) }
     var transport by remember { mutableStateOf(s.transport) }
     var modem by remember { mutableStateOf(s.modem) }
+    var fec by remember { mutableStateOf(s.afskFec) }
     var tncBaud by remember { mutableStateOf(s.tncBaud) }
     var btAddress by remember { mutableStateOf(s.btAddress) }
     var btName by remember { mutableStateOf(s.btName) }
@@ -284,13 +287,26 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                     }
                 } else {
                     Text("Modem (every station on the channel must use the same one)")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = modem == 0, onClick = { modem = 0 }, label = { Text("AFSK 1200") })
-                        FilterChip(selected = modem == 1, onClick = { modem = 1 }, label = { Text("OFDM") })
+                    for (rowModems in listOf(listOf(0, 1, 2), listOf(3, 4))) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowModems.forEach { m ->
+                                FilterChip(selected = modem == m, onClick = { modem = m }, label = { Text(Native.MODEM_LABELS[m]) })
+                            }
+                        }
                     }
-                    Text(if (modem == 1) "OFDM (COFDMTV, as in Rattlegram): decodes about 4-6 dB deeper into the noise than AFSK in simulation, " +
-                        "but is not faster. Lower the PTT lead-in to about 200 ms to save airtime." else
-                        "AFSK 1200: simple and interoperable with packet-radio tools.", style = MaterialTheme.typography.bodySmall)
+                    Text(Native.modemNote(modem), style = MaterialTheme.typography.bodySmall)
+                    if (modem == Native.MODEM_AFSK) {
+                        Text("AFSK error correction (FX.25)")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(0 to "Off", 16 to "16", 32 to "32", 64 to "64").forEach { (bytes, label) ->
+                                FilterChip(selected = fec == bytes, onClick = { fec = bytes }, label = { Text(label) })
+                            }
+                        }
+                        Text(if (fec == 0) "Off: plain AX.25-style frames." else
+                            "FX.25 with $fec check bytes repairs up to ${fec / 2} damaged bytes per frame (16 is the default; more " +
+                            "means longer transmissions). Stations without FX.25 still read frames that arrive intact.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                 }
 
                 Text("Max relay hops for my messages: ${ttl.toInt()}")
@@ -339,7 +355,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                 s.callsign = call; s.ttl = ttl.toInt(); s.preambleMs = pre.toInt(); s.txLevel = tx
                 s.busyThreshold = busy; s.pttLine = line; s.useUsbAudio = usb; s.autoPlayVoice = auto
                 s.manualCountdown = manualSecs.toInt(); s.carrierSenseMode = sense; s.bitRepair = repair
-                s.transport = transport; s.modem = modem; s.tncBaud = tncBaud; s.btAddress = btAddress; s.btName = btName
+                s.transport = transport; s.modem = modem; s.afskFec = fec; s.tncBaud = tncBaud; s.btAddress = btAddress; s.btName = btName
                 if (s.callsignValid()) onDone()
             }) { Text("Save") }
         },

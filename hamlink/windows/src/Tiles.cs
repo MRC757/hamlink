@@ -26,12 +26,18 @@ internal interface ITileSource
 /// <summary>
 /// Slippy-map raster tiles (default: openstreetmap.org) cached on disk under %LOCALAPPDATA%\HamLink\tiles.
 /// Follows the OSM tile usage policy (operations.osmfoundation.org/policies/tiles): tiles are fetched only when the
-/// visible map needs them (no bulk download, no prefetch), at most 2 connections, an identifying User-Agent, HTTP cache
-/// headers honoured (ETag revalidation, minimum 1 h), attribution shown. Tiles already on disk work with no network.
+/// visible map needs them (no bulk download, no prefetch), at most 2 connections, an identifying User-Agent with the app
+/// version and project URL, HTTP cache headers honoured (max-age or Expires, ETag revalidation, minimum 1 h), all downloads
+/// paused after 429/403/5xx (Retry-After honoured), attribution shown. Tiles already on disk work with no network.
 /// </summary>
 internal sealed class HttpTileSource : ITileSource
 {
     static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    static readonly string AppVersion =
+        typeof(HttpTileSource).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "0";
+    /// <summary>After "too many requests", "blocked" or a server error, no tile is fetched until this time (all tiles,
+    /// not just the one that failed), honouring Retry-After. Shared by every tile source.</summary>
+    static long pauseUntil;
 
     readonly Settings s;
     readonly string dir;
@@ -93,7 +99,8 @@ internal sealed class HttpTileSource : ITileSource
                 try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { } // LRU for pruning
             }
             bool fresh = img != null && expires > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            if (!fresh && s.TileOnline && StillWanted(k) && Environment.TickCount64 >= failUntil.GetValueOrDefault(k))
+            if (!fresh && s.TileOnline && StillWanted(k) && Environment.TickCount64 >= failUntil.GetValueOrDefault(k) &&
+                Environment.TickCount64 >= Interlocked.Read(ref pauseUntil))
             {
                 var got = await Fetch(z, x, y, path, etag, img != null);
                 if (got == null) failUntil[k] = Environment.TickCount64 + 60_000;
@@ -139,17 +146,28 @@ internal sealed class HttpTileSource : ITileSource
         await net.WaitAsync();
         try
         {
+            if (Environment.TickCount64 < Interlocked.Read(ref pauseUntil)) return null; // paused while we waited our turn
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            string contact = string.IsNullOrWhiteSpace(s.TileContact) ? s.Callsign : s.TileContact;
-            req.Headers.TryAddWithoutValidation("User-Agent", $"HamLink/0.1 (amateur radio messaging app; contact: {contact})");
+            req.Headers.TryAddWithoutValidation("User-Agent", UserAgent(s));
             if (haveFile && etag != null) req.Headers.TryAddWithoutValidation("If-None-Match", etag);
             using var resp = await Http.SendAsync(req);
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            long ttl = (long)Math.Max((resp.Headers.CacheControl?.MaxAge ?? TimeSpan.FromDays(7)).TotalSeconds, 3600) * 1000;
-            if ((int)resp.StatusCode == 304)
+            long ttl = CacheMs(resp, now);
+            int code = (int)resp.StatusCode;
+            if (code == 304)
             {
                 WriteMeta(path, etag, now + ttl);
                 return Decode(await File.ReadAllBytesAsync(path));
+            }
+            if (code == 429 || code == 403 || code >= 500)
+            {
+                // The server asks us to slow down (429), refuses us (403) or is in trouble: pause every tile download.
+                TimeSpan wait = resp.Headers.RetryAfter?.Delta
+                    ?? (resp.Headers.RetryAfter?.Date is { } d ? d - DateTimeOffset.UtcNow : (TimeSpan?)null)
+                    ?? TimeSpan.FromMinutes(code == 403 ? 30 : 2);
+                long until = Environment.TickCount64 + (long)Math.Clamp(wait.TotalMilliseconds, 30_000, 3_600_000);
+                Interlocked.Exchange(ref pauseUntil, until);
+                return null;
             }
             if (!resp.IsSuccessStatusCode) return null;
             byte[] bytes = await resp.Content.ReadAsByteArrayAsync();
@@ -166,6 +184,21 @@ internal sealed class HttpTileSource : ITileSource
         {
             net.Release();
         }
+    }
+
+    /// <summary>Identifies the app, its version and who runs it, as the OSM tile policy asks; never a browser's agent.</summary>
+    internal static string UserAgent(Settings s)
+    {
+        string contact = string.IsNullOrWhiteSpace(s.TileContact) ? s.Callsign : s.TileContact;
+        return $"HamLink/{AppVersion} (amateur radio messaging app; +https://github.com/MRC757/hamlink; contact: {contact})";
+    }
+
+    /// <summary>How long a tile stays fresh: Cache-Control max-age, else the Expires header, else 7 days; at least 1 hour.</summary>
+    static long CacheMs(HttpResponseMessage resp, long nowMs)
+    {
+        TimeSpan? age = resp.Headers.CacheControl?.MaxAge;
+        if (age == null && resp.Content.Headers.Expires is { } exp) age = exp - DateTimeOffset.FromUnixTimeMilliseconds(nowMs);
+        return (long)Math.Max((age ?? TimeSpan.FromDays(7)).TotalSeconds, 3600) * 1000;
     }
 
     static ImageSource? Decode(byte[] bytes)

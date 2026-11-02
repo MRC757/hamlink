@@ -5,9 +5,9 @@ Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT.
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
 > **Review build 0.2.0 (2026-11-01).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
-> The **Windows app now compiles and runs on Windows 11** (see *Status* below). The Android app has **never been compiled or
-> run**, and **nothing has been tried on a real radio**. Build errors and crashes, with the exact error text, are the most
-> useful feedback at this stage.
+> The **Windows app now compiles and runs on Windows 11** (see *Status* below). The Android app **now compiles to an APK** but
+> has **never been run on a phone**; nothing has been tried on a real radio. Build errors and crashes, with the exact error
+> text, are the most useful feedback at this stage.
 
 * Two ways to reach the radio: **audio + PTT** (a DigiRig or sound card, works with any FM handheld) or a
   **KISS TNC over Bluetooth/serial** (radios with a built-in TNC, e.g. BTECH UV-PRO / Vero VR-N76, or a
@@ -50,7 +50,7 @@ Pick whichever track matches what you have. Each one is useful on its own.
 |---|---|---|---|
 | 1. Core tests | Linux or macOS, Python 3, cmake, gcc | `python3 -m pip install -r tests/requirements.txt`, then `cd tests && python3 -m pytest -q` (about 3 minutes) | Any failure, with the output |
 | 2. Windows build | Windows 10/11, .NET 8 SDK, internet once for NuGet | `powershell -File windows/build.ps1`, then run `windows/publish/HamLink.exe` | Compiler errors (copy the full text), crashes at start, anything on screen that looks wrong |
-| 3. Android build | Android Studio with NDK and CMake 3.22 | Open `android/`, let Studio create the Gradle wrapper, build a debug APK | Gradle/Kotlin/NDK errors, crashes (logcat), permission prompts that misbehave |
+| 3. Android app | An Android phone (8.0+), plus the Android SDK to build | Build with `android/gradlew assembleDebug` (or open `android/` in Android Studio), install the APK, run it | Crashes (logcat), permission prompts that misbehave, anything on screen that looks wrong |
 | 4. Two-device test, no radio | Track 2 or 3 working on two devices | `docs/TESTING.md` Stage 0, then Stage 1 (acoustic coupling) and Stage 1b (map and reports) | Whether messages, ACKs, positions and SALUTE reports arrive; retry counts; how the map behaves |
 | 5. On the air | Licensed operator, radios, an interface (see *Radio interfaces* below) | `docs/TESTING.md` Stage 2/3 | TX level found, PTT lead-in needed, success rate, distance |
 
@@ -111,9 +111,11 @@ VS Code: open the repository root; *Terminal > Run Build Task* builds, F5 runs u
 A prebuilt x64 `hamlink_core.dll` is checked in at `windows/native/`; `windows/build-native.sh` rebuilds it with zig
 (`pip install ziglang`) on Linux, macOS, or Windows in Git Bash. MSVC cannot build it: Codec2 uses C99 variable-length arrays.
 
-**Android:** open `android/` in Android Studio (NDK + CMake 3.22 from the SDK Manager). There is no Gradle wrapper
-in the zip (`gradlew` could not be generated here); Android Studio creates it, or run `gradle wrapper` with Gradle 8.9+
-installed, then `./gradlew assembleDebug`. Plugins: AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, minSdk 26, targetSdk 35.
+**Android:** `cd android && ./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`) builds
+`app/build/outputs/apk/debug/app-debug.apk`; or open `android/` in Android Studio. Needs JDK 17 and an Android SDK with
+platform 35, build-tools 35, CMake 3.22.1 and NDK 27.0.12077973 (point `android/local.properties` at it with `sdk.dir=`).
+The Gradle wrapper (8.10.2) is in the repository. Plugins: AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, minSdk 26,
+targetSdk 35.
 Requires a phone with USB-C host mode (OTG).
 
 ## Radio interfaces
@@ -200,12 +202,11 @@ FM audio channel or a simulated byte link):
   in simulated noise (`docs/DSP_IMPROVEMENTS.md` step 5). Not tested against Dire Wolf or UZ7HO, or on a real radio.
 * MT63-2000 (Windows, through the C API, white noise): broadcasts 10/10 on a clean channel; acknowledged two-fragment
   messages 2/2; 30/30 messages from +6 to -2 dB SNR and 26/30 at -4 dB, none at -6 dB. Selected and started in the
-  Windows app. Not tested against fldigi on real audio, on a real radio, or on Android (the core supports it; the Android
-  modem selector has not been extended).
+  Windows app. Not tested against fldigi on real audio, on a real radio, or on a phone.
 * PSK 2400 / 3600 (Windows, through the C API, over the handheld audio model: 300-3000 Hz, 0-12 dB treble loss, +-300 ppm
   clock): every frame delivered at 12 dB and above in all combinations; acknowledged 1000-byte messages; a PSK 3600
   sender heard by a PSK 2400 receiver; selected and started in the Windows app. Not tested on a real radio, whose FM
-  discriminator, limiter and squelch the model does not include, or on Android (the selector is not extended there).
+  discriminator, limiter and squelch the model does not include, or on a phone.
 * Geodesy: Maidenhead encode/decode checked against exact rational arithmetic (9000 random points), UTM/MGRS against
   `pyproj` and the `mgrs` package (a handful of points on exact grid-line ties differ by one metre), NMEA checksums and fix rules.
 * Reports and map: bit-packed codec round trips, size limits, every error path, a 200,000-case fuzz run under
@@ -221,15 +222,15 @@ Start/Stop, sending text with manual PTT, the modem switch, and a SALUTE report 
 At start-up the app checks `hamlink_core.dll` and its API version and stops with a clear message if it is missing or
 mismatched; errors are written with stack traces to `%LOCALAPPDATA%\HamLink\error.log`. The DLL (zig, C and C++17, API
 version 7, 46 exports) imports only the Universal CRT and KERNEL32.
-The Kotlin was syntax-parsed (`python3 tools/syntax_check.py`, tree-sitter; this caught one real Kotlin
-comment-nesting error), JNI names were cross-checked against the C export tables, and the JNI library linked on the
-host, but **the Android app has not been compiled** (no Android SDK here).
+Android app (2026-11-02): built for the first time, with JDK 17, AGP 8.7.3 and NDK 27, into a 13 MB debug APK for
+arm64-v8a, armeabi-v7a and x86_64. It compiled with no Kotlin errors or warnings, including the NDK build of the C++
+OFDM and MT63 modems, and all 38 Kotlin `external` functions match the JNI library's exports. It offers the same five
+modems and FX.25 setting as Windows. **It has not been run on a phone or emulator.**
 
-**Not verified**: the Android app as a whole (Compose canvas drawing, gesture handling, `LocationManager`, its map and
-report form); on Windows, the location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips,
-Test / Calibrate, KISS TNC mode, and two copies of the app exchanging messages; the apps' audio, Bluetooth and
-USB-serial behaviour with real hardware, Android's C++ (NDK) build of the
-OFDM modem, and **nothing has touched a real radio**. In particular: Bluetooth SPP/virtual-COM connection to a
+**Not verified**: the Android app running at all (Compose canvas drawing, gesture handling, `LocationManager`, its map and
+report form, permissions); on Windows, the location service (`Geolocator`), serial GPS, the tile disk cache when offline,
+voice clips, Test / Calibrate, KISS TNC mode, and two copies of the app exchanging messages; the apps' audio, Bluetooth
+and USB-serial behaviour with real hardware, and **nothing has touched a real radio**. In particular: Bluetooth SPP/virtual-COM connection to a
 real UV-PRO-class radio (based on third-party descriptions of how it works, not on a test), whether such a
 radio accepts these AX.25 frames as-is, FM limiter/pre-emphasis/squelch behaviour in the audio path, PTT
 latency, USB-audio routing and OS audio latency. Expect compile fixes and a debugging session on first bring-up.
@@ -239,9 +240,9 @@ see `third_party/aicodix/`). Rattlegram snapshot used: aicodix/rattlegram commit
 
 ## Known issues and open questions
 Things a reviewer may trip over, roughly in order of how likely they are to matter:
-1. **Android first compile.** The Android app has not been built. Likely trouble spots: Compose API details in
-   `MapView.kt` / `ReportForm.kt` / `MapScreen.kt` (FlowRow is marked experimental) and the NDK build of the C++ OFDM modem.
-   The Windows app builds and runs; its untested parts are listed under *Status* above.
+1. **Android first run.** The Android app compiles but has never run. Likely trouble spots: runtime permissions,
+   USB audio routing, the Compose map view, and the foreground service. The Windows app builds and runs; its untested
+   parts are listed under *Status* above.
 2. **Broadcast reports are not acknowledged.** On a lossy link a report can be lost without the sender knowing. Map setup >
    *Repeat my reports* (off by default) sends 1 or 2 extra copies about 30 s apart (plus random spread); receivers drop the
    copies. Each copy is a transmission.

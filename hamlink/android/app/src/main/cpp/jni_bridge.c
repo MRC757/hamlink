@@ -355,6 +355,20 @@ JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setBitRepair(JNIEnv *env, job
     (void)env; (void)thiz;
     if (G.ctx) hl_set_bit_repair(G.ctx, on ? 1 : 0);
 }
+/* FX.25 on transmitted AFSK frames (API v8): 0 off, 16/32/64 check bytes. Returns 0, or -1 for another value. */
+JNIEXPORT jint JNICALL Java_org_hamlink_app_Native_setFec(JNIEnv *env, jobject thiz, jint check_bytes) {
+    (void)env; (void)thiz;
+    return G.ctx ? hl_set_fec(G.ctx, check_bytes) : -1;
+}
+/* out3 = {FX.25 blocks decoded, frames only FEC recovered, bytes corrected} */
+JNIEXPORT void JNICALL Java_org_hamlink_app_Native_getFecInfo(JNIEnv *env, jobject thiz, jintArray out3) {
+    (void)thiz;
+    if (!G.ctx || (*env)->GetArrayLength(env, out3) < 3) return;
+    uint32_t v[3];
+    hl_get_fec_info(G.ctx, v);
+    jint j[3] = {(jint)v[0], (jint)v[1], (jint)v[2]};
+    (*env)->SetIntArrayRegion(env, out3, 0, 3, j);
+}
 JNIEXPORT jboolean JNICALL Java_org_hamlink_app_Native_channelBusy(JNIEnv *env, jobject thiz) {
     (void)env; (void)thiz;
     return G.ctx && hl_channel_busy(G.ctx) ? JNI_TRUE : JNI_FALSE;

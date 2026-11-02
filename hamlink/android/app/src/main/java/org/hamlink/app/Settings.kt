@@ -43,10 +43,15 @@ class Settings(ctx: Context) {
         get() = sp.getString("dest", "CQ") ?: "CQ"
         set(v) = sp.edit().putString("dest", v.trim().uppercase()).apply()
 
-    /** 0 = AFSK 1200 baud, 1 = OFDM (COFDMTV). Every station on the channel must use the same one. */
+    /** 0 = AFSK 1200 baud, 1 = OFDM (COFDMTV), 2 = MT63-2000, 3 = PSK 2400, 4 = PSK 3600 (Native.MODEM_*).
+     *  Every station on the channel must use the same one (PSK 2400 and 3600 stations hear each other). */
     var modem: Int
-        get() = sp.getInt("modem", 0)
-        set(v) = sp.edit().putInt("modem", if (v == 1) 1 else 0).apply()
+        get() = sp.getInt("modem", 0).let { if (it in 0..4) it else 0 }
+        set(v) = sp.edit().putInt("modem", if (v in 0..4) v else 0).apply()
+    /** FX.25 error correction on transmitted AFSK frames: 0 off, or 16/32/64 Reed-Solomon check bytes (default 16). */
+    var afskFec: Int
+        get() = sp.getInt("afskFec", 16).let { if (it in listOf(0, 16, 32, 64)) it else 16 }
+        set(v) = sp.edit().putInt("afskFec", if (v in listOf(0, 16, 32, 64)) v else 16).apply()
     /** "audio" = USB audio interface + PTT line, "tnc" = radio with built-in KISS TNC over Bluetooth. */
     var transport: String
         get() = sp.getString("transport", "audio") ?: "audio"

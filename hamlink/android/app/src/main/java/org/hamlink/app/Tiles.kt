@@ -31,7 +31,8 @@ interface TileSource {
  *
  * Behaviour follows the OSM tile usage policy (operations.osmfoundation.org/policies/tiles):
  * tiles are fetched only when the visible map needs them (no bulk download, no prefetch), at most 2 connections,
- * an identifying User-Agent, HTTP cache headers honoured (ETag revalidation, min 1 h), and attribution is shown.
+ * an identifying User-Agent with the app version and project URL, HTTP cache headers honoured (max-age or Expires, ETag
+ * revalidation, min 1 h), all downloads paused after 429/403/5xx (Retry-After honoured), and attribution is shown.
  * Tiles already on disk are used forever when offline. Set a different URL template for your own/commercial tile
  * server if you need heavier use.
  */
@@ -46,6 +47,8 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
     private val wantedAt = ConcurrentHashMap<Long, Long>()
     private val failUntil = ConcurrentHashMap<Long, Long>()
     private val pool = Executors.newFixedThreadPool(2) // OSM policy: at most 2 connections
+    private val appVersion: String =
+        try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "0" } catch (e: Exception) { "0" }
 
     init { pool.execute { prune() } }
 
@@ -103,6 +106,7 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
     private fun fetch(z: Int, x: Int, y: Int, f: File, meta: Meta): Bitmap? {
         val url = settings.tileUrl.replace("{z}", "$z").replace("{x}", "$x").replace("{y}", "$y")
         if (!url.startsWith("https://")) return null
+        if (System.currentTimeMillis() < pauseUntil) return null
         val c = URL(url).openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 8000
@@ -114,6 +118,13 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
             if (code == 304) {
                 writeMeta(f, meta.etag, now + maxAgeMs(c))
                 return BitmapFactory.decodeFile(f.path)
+            }
+            if (code == 429 || code == 403 || code >= 500) {
+                // slow down (429), refused (403) or server trouble: pause every tile download, honouring Retry-After
+                val wait = c.getHeaderField("Retry-After")?.trim()?.toLongOrNull()?.times(1000L)
+                    ?: if (code == 403) 30 * 60_000L else 2 * 60_000L
+                pauseUntil = now + wait.coerceIn(30_000L, 3_600_000L)
+                return null
             }
             if (code != 200) return null
             val bytes = c.inputStream.use { it.readBytes() }
@@ -131,7 +142,9 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
 
     private fun maxAgeMs(c: HttpURLConnection): Long {
         val cc = c.getHeaderField("Cache-Control") ?: ""
-        val secs = Regex("max-age=(\\d+)").find(cc)?.groupValues?.get(1)?.toLongOrNull() ?: (7 * 24 * 3600L)
+        val secs = Regex("max-age=(\\d+)").find(cc)?.groupValues?.get(1)?.toLongOrNull()
+            ?: c.expiration.takeIf { it > 0 }?.let { (it - System.currentTimeMillis()) / 1000 } // Expires header
+            ?: (7 * 24 * 3600L)
         return maxOf(secs, 3600L) * 1000L
     }
 
@@ -139,9 +152,10 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
         metaFile(f).writeText((etag ?: "") + "\n" + expiresAt + "\n")
     }
 
+    /** Identifies the app, its version and who runs it, as the OSM tile policy asks. */
     private fun userAgent(): String {
         val contact = settings.tileContact.ifBlank { settings.callsign }
-        return "HamLink/0.1 (amateur radio messaging app; contact: $contact)"
+        return "HamLink/$appVersion (amateur radio messaging app; +https://github.com/MRC757/hamlink; contact: $contact)"
     }
 
     /** Keep the cache under the configured size by deleting the least recently used tiles. */
@@ -159,6 +173,9 @@ class HttpTileSource(ctx: Context, private val settings: Settings) : TileSource 
     }
 
     companion object {
+        /** After "too many requests", "blocked" or a server error, no tile is fetched until then (honours Retry-After). */
+        @Volatile private var pauseUntil = 0L
+
         private fun hash(s: String): String =
             MessageDigest.getInstance("SHA-1").digest(s.toByteArray()).take(6).joinToString("") { "%02x".format(it) }
     }

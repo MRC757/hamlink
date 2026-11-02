@@ -55,8 +55,8 @@ class Engine(private val ctx: Context) : MeshListener {
     fun setModem(modem: Int) = post {
         if (settings.transport == "tnc") return@post
         val rc = Native.setModem(modem)
-        if (rc != 0 && modem == Native.MODEM_OFDM) Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "OFDM modem could not start; using AFSK 1200"))
-        else Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Modem: " + if (modem == Native.MODEM_OFDM) "OFDM (COFDMTV)" else "AFSK 1200 baud"))
+        if (rc != 0) Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "${Native.modemName(modem)} could not start; using AFSK 1200"))
+        else Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Modem: " + Native.modemName(modem)))
         updateSummary(if (rc != 0) Native.MODEM_AFSK else modem)
     }
 
@@ -68,7 +68,8 @@ class Engine(private val ctx: Context) : MeshListener {
             else -> "PTT via ${settings.pttLine}"
         }
         val sense = when (settings.carrierSenseMode) { Native.CS_OFF -> "carrier sense OFF"; Native.CS_DATA -> "carrier sense: data only"; else -> "carrier sense on" }
-        val m = if (modem == Native.MODEM_OFDM) "OFDM" else "AFSK 1200"
+        val m = if (modem == Native.MODEM_AFSK) { if (settings.afskFec > 0) "AFSK 1200 + FX.25 (${settings.afskFec})" else "AFSK 1200" }
+                else Native.MODEM_LABELS[modem]
         Hub.ui { Hub.modeSummary = "$audio · $ptt · $m · $sense" }
     }
 
@@ -145,6 +146,8 @@ class Engine(private val ctx: Context) : MeshListener {
 
     // Called every loop turn on the engine thread (both audio and Bluetooth-TNC modes).
     private var nextMapAt = 0L
+    private val fecInfo = IntArray(3)
+    private var fecOnlySeen = 0
     private var nextClockAt = 0L
     private var beaconDueAt = 0L
     private fun housekeeping(t: Long) {
@@ -156,6 +159,12 @@ class Engine(private val ctx: Context) : MeshListener {
             nextMapAt = t + 2000
             val items = MapItem.parse(Native.mapSnapshot(t))
             Hub.ui { Hub.mapItems = items }
+            Native.getFecInfo(fecInfo)
+            if (fecInfo[1] > fecOnlySeen) {
+                Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "FX.25 error correction recovered ${fecInfo[1] - fecOnlySeen} frame(s) " +
+                    "that arrived damaged (${fecInfo[2]} bad bytes fixed so far)"))
+                fecOnlySeen = fecInfo[1]
+            }
         }
         val minutes = settings.beaconMin
         if (minutes > 0 && Positions.current != null) {
@@ -167,6 +176,7 @@ class Engine(private val ctx: Context) : MeshListener {
     fun setReportRepeat(extra: Int) = post { Native.setReportRepeat(extra, REPEAT_INTERVAL_MS) }
 
     private fun afterStart() {
+        fecOnlySeen = 0
         Native.setReportRepeat(settings.reportRepeat, REPEAT_INTERVAL_MS)
         Native.setClock(System.currentTimeMillis() / 1000, now())
         Positions.current?.let { Native.mapSetSelf(it.lat, it.lon, it.radiusM, now()) }
@@ -269,15 +279,19 @@ class Engine(private val ctx: Context) : MeshListener {
         val tnc = settings.transport == "tnc"
         Native.start(cs, settings.relay, settings.ttl, if (tnc) 300 else settings.preambleMs,
             (System.nanoTime() xor cs.hashCode().toLong()).toInt(), this)
-        if (!tnc && settings.modem == Native.MODEM_OFDM && Native.setModem(Native.MODEM_OFDM) != 0)
-            Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "OFDM modem could not start; using AFSK 1200"))
+        var startModem = settings.modem
+        if (!tnc && startModem != Native.MODEM_AFSK && Native.setModem(startModem) != 0) {
+            Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "${Native.modemName(startModem)} could not start; using AFSK 1200"))
+            startModem = Native.MODEM_AFSK
+        }
         Native.setLink(if (tnc) Native.LINK_TNC else Native.LINK_AUDIO, settings.tncBaud)
+        Native.setFec(settings.afskFec)
         afterStart()
         if (tnc) { loopTnc(); return }
         val manual = settings.pttLine == "MANUAL"
         Native.setManualPtt(manual)
-        Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Modem: " + if (settings.modem == Native.MODEM_OFDM) "OFDM (COFDMTV)" else "AFSK 1200 baud"))
-        updateSummary(settings.modem)
+        Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Modem: " + Native.modemName(startModem)))
+        updateSummary(startModem)
         Hub.ui { Hub.manualMode = manual; Hub.manualStage = ""; Hub.manualPending = 0 }
         val busyThr = settings.busyThreshold // the carrier-sense mode decides whether level counts
         Native.setCarrierSense(settings.carrierSenseMode)
