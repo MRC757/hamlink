@@ -147,6 +147,38 @@ Kept small: a relay is configured on the hill once and then checked now and then
 Later options: remote status over the radio itself (care needed: remote control of a station has its own rules),
 KISS server for Dire Wolf / Pat, JS8Call bridge (needs a bigger Pi), map and reports for a Pi field station.
 
+## Installation (planned)
+Three stages, from developer-friendly (phase 1) to plug-and-play (phase 4).
+
+### 1. Install script (phase 1)
+On **Raspberry Pi OS Lite (64-bit)**:
+1. On a PC, write the SD card with **Raspberry Pi Imager**: *Raspberry Pi OS Lite (64-bit)*; in its settings set the
+   hostname (e.g. `hamlink-relay`), Wi-Fi, and a user with SSH enabled.
+2. Boot the Pi and log in from the PC: `ssh you@hamlink-relay.local`.
+3. Run `curl -sSL https://raw.githubusercontent.com/MRC757/hamlink/master/hamlink/pi/install.sh | bash`
+   (or `git clone` the repository and run `hamlink/pi/install.sh`, to read the script first). It:
+   * installs the system packages (Python 3, PortAudio, BlueZ);
+   * downloads the **prebuilt `libhamlink_api.so` for ARM64** from the GitHub release (CI already builds it), so the Zero
+     does not have to compile Codec2 and MT63 (slow, and tight in 512 MB); building on the Pi is the fallback;
+   * creates a Python environment owned by a dedicated `hamlink` user, with access to audio, serial ports, GPIO and
+     Bluetooth;
+   * installs and starts the **systemd service**, which starts at power-on and restarts if it stops.
+4. `sudo hamlinkd --setup` asks for the callsign, radio link (DigiRig or a paired Bluetooth radio), modem and PTT.
+   From phase 3 this is also on the web page.
+
+Updates: run the script again, or `sudo hamlinkd --update` (fetches the newest release, keeps the settings, restarts).
+
+### 2. Ready-made SD card image (phase 4, for the hill)
+1. Download `hamlink-relay-<version>.img.xz` from the GitHub release and write it with Raspberry Pi Imager.
+2. Boot: the Pi starts its own Wi-Fi hotspot `hamlink-relay`.
+3. Join it with a phone, open `http://hamlink.local`, set callsign, radio link and password.
+
+The image includes the read-only file system, watchdog and transmit-time limits. Updates make the file system writable
+briefly, apply, and lock it again (from the web page or the CLI, on the hotspot).
+
+### 3. Possibly later: a Debian package
+`apt install hamlink` from a project repository, for Pis that also run other software.
+
 ## Rules to keep in mind (US; check your own country's)
 * An unattended relay is an **automatically controlled** station: it must identify, a control operator must be able to
   shut it down, and automatic control of digital stations is limited to certain frequencies. Pick the frequency with that
