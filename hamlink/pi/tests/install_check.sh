@@ -36,7 +36,7 @@ sudo HAMLINK_ROOT="$root" bash hamlink/pi/harden.sh >/dev/null
 for f in etc/systemd/system.conf.d/hamlink-watchdog.conf etc/systemd/journald.conf.d/hamlink.conf \
          etc/NetworkManager/system-connections/hamlink-ap.nmconnection etc/hostname \
          etc/systemd/system/multi-user.target.wants/hamlink-wifi-unblock.service; do
-    sudo test -e "$root/$f" || fail "harden.sh did not write $f"
+    sudo test -e "$root/$f" -o -L "$root/$f" || fail "harden.sh did not write $f"  # (-L: links point into the target system)
 done
 sudo grep -q "ssid=hamlink-relay" "$root/etc/NetworkManager/system-connections/hamlink-ap.nmconnection" || fail "hotspot"
 
