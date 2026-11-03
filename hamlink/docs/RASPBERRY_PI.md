@@ -1,6 +1,9 @@
 # HamLink on a Raspberry Pi: plan
 
-Status: **plan, not started** (2026-11-03).
+Status (2026-11-03): **phase 0 done except the measurement on a real Pi.** `.github/workflows/core-linux.yml` builds
+`libhamlink_api.so` on GitHub's Linux x86-64 and ARM64 runners, runs the modem benchmark and the full test suite (88
+passed on both). `tools/bench_modems.py` measures each modem's CPU load; on the ARM64 runner (a fast server core, not a
+Pi) every modem's receiver used 0.8-1.4% of one core and decoded every test message. Next: run it on a Zero 2 W.
 
 Target: an **unattended hilltop relay** on a **Raspberry Pi Zero 2 W**, set up and checked from a **web browser**, working
 with a **DigiRig** (audio + serial PTT, every modem) or a **radio with a built-in Bluetooth KISS TNC** (AFSK 1200 only;
