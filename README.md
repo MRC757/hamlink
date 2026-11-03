@@ -3,7 +3,8 @@
 Text messages, voice clips, position reports and SALUTE situation reports over cheap handheld VHF/UHF FM radios
 (Baofeng UV-5R class). A **Windows 11 PC** or an **Android phone** is the modem; the radio connects through a DigiRig
 (audio + PTT), a radio with a built-in KISS TNC, or, for a first test, plain acoustic coupling. A simplex
-store-and-forward relay mode lets stations that can't hear each other talk through a third station on a hilltop.
+store-and-forward relay mode lets stations that can't hear each other talk through a third station on a hilltop, which
+can be an unattended **Raspberry Pi** set up from a phone's browser.
 
 Amateur radio only: callsign required, no encryption, publicly documented protocol.
 
@@ -78,8 +79,29 @@ From the newest release on the [Releases page](https://github.com/MRC757/hamlink
 * **Windows:** `HamLink-<version>-win-x64.zip`. Unzip it anywhere and run `HamLink.exe`. Nothing to install: .NET is
   included, and it runs on an air-gapped PC. The program is not code-signed, so Windows SmartScreen may warn the first
   time: choose *More info > Run anyway*.
+* **Raspberry Pi:** `install.sh` (above) fetches `libhamlink_api-linux-aarch64.so` from the release by itself. The SD
+  card image, `hamlink-relay-<version>.img.xz`, is attached from the next release on.
 * **Android 8.0+:** `HamLink-<version>-android.apk`. Open it on the phone and allow *Install unknown apps*. It is a test
   build signed with a development key, not a Play Store release.
+
+## Raspberry Pi hilltop relay (preview)
+`hamlinkd` runs the same core as an unattended relay on a Raspberry Pi (Zero 2 W or later). It works with a DigiRig on
+any modem, or with a radio's Bluetooth KISS TNC. You set it up and check on it from a phone on the Pi's own Wi-Fi hotspot:
+status, messages, live log, settings, test tones, Bluetooth pairing and Help, behind a password.
+
+<table>
+<tr>
+<td width="50%"><img src="hamlink/docs/screenshots/pi-web-status.png" alt="Relay web page, status" width="300"></td>
+<td width="50%"><img src="hamlink/docs/screenshots/pi-web-settings.png" alt="Relay web page, settings" width="300"></td>
+</tr>
+</table>
+
+Install with `curl -sSL https://raw.githubusercontent.com/MRC757/hamlink/master/hamlink/pi/install.sh | bash` on
+Raspberry Pi OS Lite (64-bit), or flash the ready-made SD card image. The image boots into the hotspot `hamlink-relay`
+with the page at http://10.42.0.1/.
+
+**Not yet run on a Pi.** Everything is tested in CI on ARM64, including a real install under systemd. Hardware tests
+with a DigiRig and radios come next. Setup, hardening and safety limits: [hamlink/pi/README.md](hamlink/pi/README.md).
 
 ## Build and run from source (Windows)
 Needs the .NET 8 or 9 SDK and internet access once, for NuGet.
@@ -103,6 +125,8 @@ with no radio to a DigiRig on the air.
 |---|---|
 | [hamlink/README.md](hamlink/README.md) | Full overview: modes, radio interfaces, wiring, what has and hasn't been verified, known issues |
 | [hamlink/windows/README.md](hamlink/windows/README.md) | Windows build, DigiRig setup, KISS TNC, maps |
+| [hamlink/pi/README.md](hamlink/pi/README.md) | Raspberry Pi relay: install, web page, Bluetooth radios, hilltop hardening |
+| [hamlink/docs/RASPBERRY_PI.md](hamlink/docs/RASPBERRY_PI.md) | Pi plan: hardware, solar and battery sizing, phases |
 | [hamlink/docs/TESTING.md](hamlink/docs/TESTING.md) | Staged test plan, from no radio to on the air |
 | [hamlink/docs/PROTOCOL.md](hamlink/docs/PROTOCOL.md) | On-air format |
 | [hamlink/docs/MAPS_AND_REPORTS.md](hamlink/docs/MAPS_AND_REPORTS.md) | Positions, SALUTE, SITREP, map behaviour |
