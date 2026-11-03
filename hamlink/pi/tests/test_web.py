@@ -180,3 +180,16 @@ def test_markdown_subset_escapes_html():
     assert "<script>" not in out and "&lt;script&gt;" in out
     assert "<h1>T</h1>" in out and "<b>b</b>" in out and "<code>c</code>" in out
     assert out.count("<ul>") == 2 and "x &lt; y" in out
+
+
+def test_every_module_imports_and_the_cli_answers(capsys):
+    import importlib
+    import pkgutil
+    import hamlinkd
+    for m in pkgutil.iter_modules(hamlinkd.__path__):
+        if m.name != "__main__":
+            importlib.import_module("hamlinkd." + m.name)
+    from hamlinkd import cli
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert "--set-password" in capsys.readouterr().out

@@ -111,8 +111,7 @@ def run(cfg, a):
         line = time.strftime("%Y-%m-%d %H:%M:%S ", time.localtime(e["t"])) + e["text"]
         print(line, flush=True)
         if log_file:
-            log_file.write(line + "
-")
+            log_file.write(line + "\n")
 
     svc = service.Service(a.config, a.lib, a.state_dir, sink=sink)
     srv = control.serve(svc, cfg.control_port)
