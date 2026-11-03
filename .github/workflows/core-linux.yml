@@ -1,0 +1,68 @@
+# Builds the HamLink core on Linux x86-64 and ARM64 (the Raspberry Pi's architecture), runs the test suite and the
+# modem CPU benchmark (hamlink/tools/bench_modems.py), and keeps libhamlink_api.so as a downloadable artifact.
+# Phase 0 of hamlink/docs/RASPBERRY_PI.md.
+name: core-linux
+
+on:
+  push:
+    paths: ["hamlink/core/**", "hamlink/third_party/**", "hamlink/schemas/**", "hamlink/tests/**",
+            "hamlink/tools/bench_modems.py", "hamlink/CMakeLists.txt", ".github/workflows/core-linux.yml"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: hamlink
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential cmake
+          python -m pip install -q -r tests/requirements.txt
+
+      - name: Build the core (Release)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target hamlink_api -j"$(nproc)"
+          file build/core/libhamlink_api.so
+
+      - name: Modem CPU benchmark
+        run: |
+          python tools/bench_modems.py --lib build/core/libhamlink_api.so --seconds 20 | tee bench.txt
+          {
+            echo "### Modem CPU benchmark (${{ matrix.arch }})"
+            echo '```'
+            cat bench.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test suite
+        working-directory: hamlink/tests
+        run: python -m pytest -q
+
+      - name: Keep the library
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libhamlink_api-linux-${{ matrix.arch }}
+          path: |
+            hamlink/build/core/libhamlink_api.so
+            hamlink/bench.txt
+          if-no-files-found: warn
