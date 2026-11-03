@@ -17,13 +17,16 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   Bluetooth KISS TNC). In TNC mode the radio does the modulation, keying and carrier sense.
 * Five modems on the audio link, chosen in Settings (every station on a channel must use the same one). First three:
   **AFSK 1200 baud** (Bell 202 tones + HDLC; the default), **OFDM** (COFDMTV, the modem from the
-  Rattlegram app) and **MT63-2000** (the fldigi mode, long interleave). Measured in simulation: OFDM decodes about
-  **4-6 dB deeper into the noise** than AFSK (100% of packets at 8 dB SNR, where AFSK frames were 55%) but it is
-  **not faster**: on a clean link it used about 20% more airtime than AFSK for the same message, because every ACK burst
-  carries OFDM lead-in symbols. **MT63-2000 is slow but robust**: a short message took 10.5 s on the air against 1.5 s
+  Rattlegram app) and **MT63-2000** (the fldigi mode, long interleave). Measured in simulation (2026-11-03, 500-byte
+  acknowledged messages over the handheld-radio channel model, 8 noise seeds per level): **AFSK with FX.25** (the
+  default) delivered every message down to **5 dB SNR**, plain AFSK down to 7 dB (half at 6 dB), and **OFDM down to
+  7 dB**, using about 10% more airtime than AFSK with FX.25. OFDM's earlier lead (4-6 dB, measured before the AFSK
+  receive prefilter and FX.25) is gone on this channel; it may still cope better with echo and multipath (it decoded
+  acoustically at 30 cm where AFSK did not), which the model does not include. **MT63-2000 is slow but robust**: a short message took 10.5 s on the air against 1.5 s
   for AFSK, and every transmission spends ~5 s on receiver lock-in and interleaver flush, but it delivered 26-30 of 30
-  messages from +6 down to -4 dB SNR, where AFSK with FX.25 delivered none below +6 dB. Choose AFSK for speed and
-  packet-radio interoperability, OFDM or MT63 for weak or noisy paths, MT63 when getting through matters more than time.
+  messages from +6 down to -4 dB SNR, where AFSK with FX.25 delivered none below +6 dB. Choose **AFSK with FX.25** for
+  most links (and for packet-radio interoperability), **OFDM** to try on paths with echo or multipath, and **MT63** when
+  getting through matters more than time.
 * Two more for speed: **PSK 2400** (QPSK) and **PSK 3600** (8-PSK), HamLink's own 1200-baud single-carrier PSK with an
   adaptive equaliser and Reed-Solomon per frame (`docs/PROTOCOL.md`). Over a simulated handheld audio path a 1000-byte
   acknowledged message took 8.0 s and 6.4 s, against 15.2 s on AFSK with FX.25. PSK 2400 was as robust as AFSK with
@@ -215,7 +218,8 @@ FM audio channel or a simulated byte link):
   band-limiting, 6 dB spectral tilt and +/-300 ppm clock error (~97% at 10 dB, ~55% at 8 dB).
 * OFDM: 100% of packets down to 8 dB SNR, 96-100% at 6 dB, 0% at 4 dB (same channel model); 4 back-to-back
   packets in a burst decode with the tail symbol trimmed; end-to-end text with ACK, a 500 B voice clip through
-  a hidden-node relay, and a marginal 7 dB link where OFDM delivers and AFSK needs more retries or fails.
+  a hidden-node relay, and a marginal 7 dB link that OFDM delivers (since FX.25 and the prefilter, AFSK does too, and
+  further down: see the modem summary at the top).
   Receive CPU on this x86 host: OFDM 0.7% of one core, AFSK 0.2%. Not measured on a phone.
 * Mesh: fragmentation, ARQ with 35% frame loss, relay, duplicate suppression, ID within 10 minutes, both
   fragment size classes interoperating, unknown classes ignored, callsign sanitising.
@@ -312,9 +316,10 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
     the time (about 3% in the seconds after a burst, with or without the receive prefilter), so a transmission now and
     then waits a moment longer. Decoding is unaffected, and with the squelch closed the receiver hears silence and it
     does not happen.
-11. **OFDM vs AFSK sensitivity claims need re-measuring.** The "OFDM decodes 4-6 dB deeper than AFSK" figures above and
-    in the apps' modem notes date from before FX.25 and the receive prefilter. In a recent simulation run (one noise
-    seed) AFSK with FX.25 delivered a 500-byte acknowledged message down to 5 dB SNR and OFDM only down to 7 dB.
+11. **OFDM's sensitivity advantage is gone in simulation.** Re-measured 2026-11-03 (168 runs, 8 noise seeds per level):
+    AFSK with FX.25 delivers 500-byte acknowledged messages down to 5 dB SNR, OFDM down to 7 dB. The apps' modem notes
+    still carry the old "OFDM 4-6 dB deeper" text until the next release. OFDM has not been compared with AFSK on a
+    real radio, or on a channel with echo or multipath, where it may still do better.
 12. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
     SALUTE reports between the two through JS8Call's TCP API, with operator approval of HF transmissions by default.
 

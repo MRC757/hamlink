@@ -14,7 +14,7 @@ HamLink sends text, voice clips, positions and reports over FM radios. This help
 The faster the modem, the cleaner the audio path it needs. Acoustic coupling (no cable, the phone or PC simply held next to the radio or the other device) adds room echo, which the fast modems cannot cope with.
 
 - **MT63-2000 (slow but robust)**: works by acoustic coupling, even at about 1 m from the speaker in a room, and through any radio. The best choice for weak, noisy or fading signals, and for a quick test without a cable. Slow: about 7 times the airtime of AFSK.
-- **OFDM**: works by acoustic coupling within about 30 cm of the speaker, better with a cable. Decodes weaker signals than AFSK but is not faster.
+- **OFDM**: works by acoustic coupling within about 30 cm of the speaker, better with a cable. Not faster than AFSK, and on a normal radio link AFSK with FX.25 now decodes slightly weaker signals; OFDM may cope better with echo and multipath.
 - **AFSK 1200 (the default, with FX.25 error correction)**: needs an audio cable (DigiRig or similar) for reliable use. Acoustic coupling works only with the microphone within about 10 cm of the speaker. The only modem a radio's built-in TNC can send (Bluetooth TNC link).
 - **PSK 2400**: needs an audio cable (DigiRig or similar). About twice as fast as AFSK and about as robust over a cable. Acoustic coupling fails beyond about 10 to 30 cm.
 - **PSK 3600 (fastest)**: needs an audio cable and a strong, clean signal. About 2.4 times as fast as AFSK. Does not work by acoustic coupling except pressed against the speaker. If messages need retries, drop to PSK 2400.

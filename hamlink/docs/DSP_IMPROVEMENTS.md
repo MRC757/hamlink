@@ -159,9 +159,9 @@ Background, from before the choice was made. 1200 baud packet has no FEC: one ba
   sync word for better packet detection and carrier detect, and no bit stuffing. Field use on TARPN links found false
   decodes on marginal links, which led to "IL2P+CRC".
 * HamLink controls both ends of its audio link, so it could adopt IL2P-style Reed-Solomon per frame as a protocol v2
-  option. Note that the **OFDM modem already has strong FEC** (polar codes), and in our simulation decodes 4-6 dB deeper
-  than AFSK. For weak paths today, choosing OFDM is the FEC option. Recommendation: do steps 1-3 first, then decide on FEC
-  for AFSK using real recordings and on-air loss rates.
+  option. Note that the **OFDM modem already has strong FEC** (polar codes); when this was written it decoded 4-6 dB
+  deeper than AFSK in simulation. (Update 2026-11-03: after steps 1-3 and FX.25 (step 5), AFSK with FX.25 delivers 500-byte
+  acknowledged messages down to 5 dB SNR in simulation, OFDM down to 7 dB; see the README's modem summary.)
 
 ### 6. Audio-path details worth checking on real hardware — deferred to on-air testing, see ROADMAP
 * **Squelch:** a closed squelch takes time to open and adds a noise burst ("tail") at the end. The PTT lead-in covers the

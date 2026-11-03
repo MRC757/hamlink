@@ -22,7 +22,7 @@ object Native {
 
     // ---- modem and link choice ----
     const val MODEM_AFSK = 0    // 1200 baud Bell 202 AFSK (default)
-    const val MODEM_OFDM = 1    // COFDMTV (Rattlegram family): about 4-6 dB more sensitive in simulation
+    const val MODEM_OFDM = 1    // COFDMTV (Rattlegram family)
     const val MODEM_MT63 = 2    // MT63-2000: slow but robust
     const val MODEM_PSK2400 = 3 // QPSK, 1200 baud: about twice the throughput of AFSK
     const val MODEM_PSK3600 = 4 // 8-PSK: fastest, needs a strong signal (PSK 2400 and 3600 stations hear each other)
@@ -40,8 +40,9 @@ object Native {
     }
     /** One-paragraph explanation for the settings screen. */
     fun modemNote(modem: Int) = when (modem) {
-        MODEM_OFDM -> "OFDM (COFDMTV, as in Rattlegram): decodes about 4-6 dB deeper into the noise than AFSK in simulation, " +
-            "but is not faster. Lower the PTT lead-in to about 200 ms to save airtime."
+        MODEM_OFDM -> "OFDM (COFDMTV, as in Rattlegram): not faster than AFSK, and on a normal radio link AFSK with FX.25 " +
+            "now reaches slightly weaker signals in simulation. It may cope better with echo and multipath. Lower the " +
+            "PTT lead-in to about 200 ms to save airtime."
         MODEM_MT63 -> "MT63-2000 is slow but robust: about 7 times the airtime of AFSK (a short message takes ~10 s, every " +
             "transmission adds ~5 s), but in simulation it decoded at -4 dB SNR, where AFSK needs about +6 dB. For weak, " +
             "noisy or fading paths."

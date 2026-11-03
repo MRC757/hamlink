@@ -196,8 +196,9 @@ internal sealed class SettingsWindow : Window
         tncSection.Visibility = tnc ? Visibility.Visible : Visibility.Collapsed;
         modemHint.Text = modem.SelectedIndex switch
         {
-            1 => "OFDM decodes about 4-6 dB deeper into the noise than AFSK in simulation, but is not faster: the lead-in " +
-                 "symbols make it use more airtime on a clean link. Lower the PTT lead-in to about 200 ms to save time.",
+            1 => "OFDM is not faster than AFSK (its lead-in symbols cost airtime), and on a normal radio link AFSK with FX.25 " +
+                 "now reaches slightly weaker signals in simulation. It may cope better with echo and multipath. Lower the " +
+                 "PTT lead-in to about 200 ms to save time.",
             2 => "MT63-2000 is slow but robust: about 7 times the airtime of AFSK (a short message takes ~10 s, every " +
                  "transmission adds ~5 s), but in simulation it decoded at -4 dB SNR, where AFSK needs about +6 dB. " +
                  "For weak, noisy or fading paths. Occupies 500-2500 Hz; fldigi can tune it in but shows the data as gibberish.",
