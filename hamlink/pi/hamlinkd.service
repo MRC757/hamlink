@@ -1,0 +1,22 @@
+# HamLink relay service. Installed by hamlink/pi/install.sh to /etc/systemd/system/.
+[Unit]
+Description=HamLink relay
+After=sound.target bluetooth.target network.target
+Wants=bluetooth.target
+
+[Service]
+User=hamlink
+Group=hamlink
+ExecStart=/usr/local/bin/hamlinkd --state-dir /var/lib/hamlink
+Restart=always
+RestartSec=5
+# Real-time-ish scheduling for the audio thread; the modems need about 1-3% of one core.
+Nice=-5
+StateDirectory=hamlink
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

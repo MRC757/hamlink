@@ -69,7 +69,7 @@ HL_API void HL_CALL hl_get_meter(hl_ctx *c, float *out5);
 
 /* ---- modem choice and TNC link (API v3) ---- */
 #define HL_MODEM_AFSK 0 /* 1200 baud Bell 202 AFSK + HDLC (default) */
-#define HL_MODEM_OFDM 1 /* COFDMTV (Rattlegram family): ~4-6 dB more sensitive in simulation, same raw speed */
+#define HL_MODEM_OFDM 1 /* COFDMTV (Rattlegram family): polar-coded OFDM; not faster than AFSK */
 #define HL_MODEM_MT63 2 /* MT63-2000L (API v9): slow (20 characters/s, ~5 s overhead per transmission) but very robust:
                          * decodes at -3 dB SNR in simulation, about 9 dB below AFSK */
 #define HL_MODEM_PSK2400 3 /* (API v10) single-carrier QPSK, 1200 baud at 1700 Hz, 2400 bit/s on the air, RS per frame */

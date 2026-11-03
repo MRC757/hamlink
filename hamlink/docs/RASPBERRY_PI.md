@@ -5,6 +5,13 @@ Status (2026-11-03): **phase 0 done except the measurement on a real Pi.** `.git
 passed on both). `tools/bench_modems.py` measures each modem's CPU load; on the ARM64 runner (a fast server core, not a
 Pi) every modem's receiver used 0.8-1.4% of one core and decoded every test message. Next: run it on a Zero 2 W.
 
+**Phase 1 written, not yet run on a Pi:** `hamlink/pi` holds the `hamlinkd` service (audio link with serial or VOX
+PTT, and the KISS TNC link too), the CLI, the systemd unit and `install.sh`; see `hamlink/pi/README.md`. Its tests run
+three stations through a simulated channel in one process (A and B out of range, R relaying) on AFSK and PSK, plus
+the transmit limits, the TNC link and the control port; CI runs them on x86-64 and ARM64. It has also run on a PC
+sound card. Still to do on hardware: install on a Zero 2 W with a DigiRig, measure CPU, and relay between two radios.
+The install script builds the core on the Pi until a release carries the prebuilt `libhamlink_api-linux-aarch64.so`.
+
 Target: an **unattended hilltop relay** on a **Raspberry Pi Zero 2 W**, set up and checked from a **web browser**, working
 with a **DigiRig** (audio + serial PTT, every modem) or a **radio with a built-in Bluetooth KISS TNC** (AFSK 1200 only;
 the radio does the modem). A relay re-sends what it hears so that stations that cannot hear each other can talk

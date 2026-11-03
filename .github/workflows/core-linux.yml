@@ -1,12 +1,12 @@
 # Builds the HamLink core on Linux x86-64 and ARM64 (the Raspberry Pi's architecture), runs the test suite and the
 # modem CPU benchmark (hamlink/tools/bench_modems.py), and keeps libhamlink_api.so as a downloadable artifact.
-# Phase 0 of hamlink/docs/RASPBERRY_PI.md.
+# Phase 0 of hamlink/docs/RASPBERRY_PI.md; also runs the relay service tests (hamlink/pi, phase 1).
 name: core-linux
 
 on:
   push:
     paths: ["hamlink/core/**", "hamlink/third_party/**", "hamlink/schemas/**", "hamlink/tests/**",
-            "hamlink/tools/bench_modems.py", "hamlink/CMakeLists.txt", ".github/workflows/core-linux.yml"]
+            "hamlink/tools/bench_modems.py", "hamlink/pi/**", "hamlink/CMakeLists.txt", ".github/workflows/core-linux.yml"]
   pull_request:
   workflow_dispatch:
 
@@ -56,6 +56,12 @@ jobs:
       - name: Test suite
         working-directory: hamlink/tests
         run: python -m pytest -q
+
+      - name: Relay service tests (hamlink/pi)
+        working-directory: hamlink/pi
+        run: |
+          bash -n install.sh
+          python -m pytest -q tests
 
       - name: Keep the library
         if: always()
