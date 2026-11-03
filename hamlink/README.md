@@ -37,15 +37,17 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   real-time voice once framing/ARQ overhead is added. A 5 s clip is ~500 bytes, about 5.5 s of airtime direct,
   about 12 s round trip through one relay.
 * **Position reports and SALUTE situation reports on an OpenStreetMap-style map**: positions from device GPS, typed
-  lat/lon or a Maidenhead grid square; icons change colour with the reporter's assessment and fade as they age;
-  map tiles are cached on the device. **Offline map files** (raster MBTiles) work with no internet;
+  lat/lon or a Maidenhead grid square; SALUTE icons take the colour of the reporter's assessment, station icons the
+  colour of that station's latest SITREP condition, and both fade as they age; map tiles are cached on the device. **Offline map files** (raster MBTiles) work with no internet;
   `tools/make_mbtiles.py` builds one for your area from USGS topo maps or your own tile server (`docs/OFFLINE_MAPS.md`).
   Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
-  On Windows, right-click a point on the map to start a report at that location.
+  To report on a spot: right-click it on the Windows map, long-press it on Android, or use *Pick on map* in the form.
 * **Station SITREP**: an eight-field drop-down status report about your own station and area (conditions, home/
   mobile/portable, power, water, sanitation, medical, grid communications, transportation), about 4 bytes on the air.
   See `docs/MAPS_AND_REPORTS.md` and `docs/EXTENDING.md`.
+* **Built-in Help** (Windows *Help*, Android *?*): which equipment each modem needs, offline maps, and troubleshooting,
+  from `docs/help/HELP.md`. The core also warns in the log when the audio input is suppressing received signals.
 * Amateur radio only: callsign required, no encryption, publicly documented protocol.
 
 ## For reviewers and testers
@@ -54,8 +56,8 @@ Pick whichever track matches what you have. Each one is useful on its own.
 | Track | You need | Do this | What to report |
 |---|---|---|---|
 | 1. Core tests | Linux or macOS, Python 3, cmake, gcc | `python3 -m pip install -r tests/requirements.txt`, then `cd tests && python3 -m pytest -q` (about 3 minutes) | Any failure, with the output |
-| 2. Windows build | Windows 10/11, .NET 8 SDK, internet once for NuGet | `powershell -File windows/build.ps1`, then run `windows/publish/HamLink.exe` | Compiler errors (copy the full text), crashes at start, anything on screen that looks wrong |
-| 3. Android app | An Android phone (8.0+), plus the Android SDK to build | Build with `android/gradlew assembleDebug` (or open `android/` in Android Studio), install the APK, run it | Crashes (logcat), permission prompts that misbehave, anything on screen that looks wrong |
+| 2. Windows app | Windows 10/11 | Unzip the download from [Releases](https://github.com/MRC757/hamlink/releases), or build with the .NET 8 SDK (internet once for NuGet): `powershell -File windows/build.ps1`, then run `windows/publish/HamLink.exe` | Compiler errors (copy the full text), crashes at start, anything on screen that looks wrong |
+| 3. Android app | An Android phone (8.0+) | Install the APK from [Releases](https://github.com/MRC757/hamlink/releases), or build it with `android/gradlew assembleDebug` (or open `android/` in Android Studio) | Crashes (logcat), permission prompts that misbehave, anything on screen that looks wrong |
 | 4. Two-device test, no radio | Track 2 or 3 working on two devices | `docs/TESTING.md` Stage 0, then Stage 1 (acoustic coupling) and Stage 1b (map and reports) | Whether messages, ACKs, positions and SALUTE reports arrive; retry counts; how the map behaves |
 | 5. On the air | Licensed operator, radios, an interface (see *Radio interfaces* below) | `docs/TESTING.md` Stage 2/3 | TX level found, PTT lead-in needed, success rate, distance |
 
@@ -64,35 +66,40 @@ Code review is welcome anywhere. The places most likely to need a second pair of
 
 ## Modes you can select
 All of these are user settings (Settings screen); the active combination is shown on the main screen, and
-the modem can be switched live there (AFSK <-> OFDM) for A/B tests. **Start here: `docs/TESTING.md`**, a staged
+the modem can be switched live there for A/B tests. **Start here: `docs/TESTING.md`**, a staged
 plan from two devices with no radio, through acoustic coupling with a hand-pressed PTT, to a DigiRig and a
 Bluetooth radio.
 * **Radio link:** Audio + PTT, or Bluetooth/serial KISS TNC.
-* **Modem** (audio link): AFSK 1200 baud or OFDM.
+* **Modem** (audio link): AFSK 1200 (with FX.25 off/16/32/64), OFDM, MT63-2000, PSK 2400 or PSK 3600.
 * **PTT** (audio link): serial RTS, serial DTR, none / radio VOX (transmit immediately), or **Manual**
   (you press the radio's PTT when the app counts down).
 * **Audio:** a USB audio interface (DigiRig) or the phone/PC's own speaker and microphone (acoustic coupling).
 * **Carrier sense:** *Data or loud audio* (default), *Data only* (ignores room noise and voice; for acoustic tests), or *Off*.
 * **Bit repair** of received frames (default on), PTT lead-in, TX level, relay mode and hop limit.
+* **Map:** position source, beacon interval, report repeats, tile server, an offline map file. **Appearance** (Android):
+  light, dark or the phone's setting. **Record received radio audio** (Windows) to WAV files for troubleshooting.
 
 ## Layout
 ```
-core/            portable C/C++: afsk.c hdlc.c (AFSK modem) ofdm.cpp (COFDMTV wrapper) mesh.c (ARQ+relay+ID)
-                 tnc.c (KISS + AX.25 UI) voice.c (Codec2) tone.c (test tone + RX meter) hamlink_api.c (flat API)
+core/            portable C/C++: afsk.c hdlc.c fx25.c (AFSK modem, FX.25) ofdm.cpp (COFDMTV wrapper) mt63.cpp
+                 psk.c (PSK 2400/3600) mesh.c (ARQ+relay+ID) tnc.c (KISS + AX.25 UI) voice.c (Codec2) tone.c (test
+                 tone + RX meter) audiocheck.c (warns about inputs that suppress signals) hamlink_api.c (flat API)
 third_party/codec2  trimmed Codec2 (LGPL-2.1), pre-generated codebooks, no host tools needed
 third_party/aicodix vendored Rattlegram COFDMTV modem (permissive 0BSD-style license), one small patch
 third_party/mt63    vendored fldigi MT63 modem (GPL-3.0-or-later), initialisation fixes listed in its README
 android/         Kotlin + Compose app, JNI bridge, foreground service, DigiRig PTT over USB serial,
-                 map (MapView.kt, Tiles.kt), position sources (Positions.kt), schema-driven report form
-windows/         C# .NET 8 WPF app, P/Invoke to hamlink_core.dll (core/hamlink_api.c), NAudio audio,
-                 COM-port PTT, map (MapView.cs, Tiles.cs, MapPanel.cs), position sources, report form,
-                 self-contained publish for air-gapped PCs. See windows/README.md
-schemas/         report types as JSON (position, SALUTE): fields, choices, colours, ageing. tools/gen_schemas.py
+                 map (MapView.kt, Tiles.kt, MapPack.kt), position sources (Positions.kt), schema-driven report form,
+                 Help (Help.kt)
+windows/         C# .NET 8 WPF app, P/Invoke to hamlink_core.dll (core/hamlink_api.c), NAudio audio (raw WASAPI
+                 capture: RadioCapture.cs), COM-port PTT, map (MapView.cs, Tiles.cs, MapPack.cs, MapPanel.cs),
+                 position sources, report form, Help, self-contained publish for air-gapped PCs. See windows/README.md
+schemas/         report types as JSON (position, SALUTE, SITREP): fields, choices, colours, ageing. tools/gen_schemas.py
                  turns them into core/schemas_gen.[ch]; core/report.c, mapmodel.c, geo.c, nmea.c do the rest
-docs/            PROTOCOL.md, TESTING.md (staged bring-up), MAPS_AND_REPORTS.md, EXTENDING.md,
-                 DSP_IMPROVEMENTS.md (receiver research, results), ROADMAP.md (deferred work)
+docs/            PROTOCOL.md, TESTING.md (staged bring-up), MAPS_AND_REPORTS.md, EXTENDING.md, OFFLINE_MAPS.md,
+                 DSP_IMPROVEMENTS.md (receiver research, results), ROADMAP.md (deferred work), help/HELP.md (in-app Help)
 tools/           gen_schemas.py (schemas -> C tables), syntax_check.py (Kotlin/C# parse check),
-                 decode_wav.py (score the demodulator on a recording, e.g. the WA8LMF TNC Test CD)
+                 decode_wav.py / score_tnc_cd.py (score the demodulator on a recording, e.g. the WA8LMF TNC Test CD),
+                 replay_wav.py (replay a recording through every modem), make_mbtiles.py (build an offline map file)
 tests/           pytest: modem sweep, ARQ, relay, ID timing, voice, geodesy, reports, map; simulated FM audio
                  channel; report_test.c (C suite run under AddressSanitizer/UBSan)
 ```
@@ -124,21 +131,22 @@ targetSdk 35.
 Requires a phone with USB-C host mode (OTG).
 
 ## Radio interfaces
-The modem only needs clean audio in and out of the radio, so the choice of interface is about **how the radio is keyed**.
-None of these has been tried with this software yet. Specs below are from the vendors' pages, and anything about
-how they behave with HamLink is inference from those specs.
+The modem needs clean, unprocessed audio in and out of the radio, so the choice of interface is about **how the radio is
+keyed** and whether its sound chip **alters received audio**. Only the APRS-K1 PRO has been tried with HamLink so far
+(2026-11-02, see *Status*); the rest are specs from the vendors' pages.
 
 | Interface | Keying | HamLink settings | Notes |
 |---|---|---|---|
 | None: acoustic coupling | You press PTT | PTT = Manual, USB audio off, carrier sense *Data only* | Stage 1 test only. Slow and noisy, but needs nothing. |
 | [BTECH APRS-K1](https://baofengtech.com/product/aprs-k1/) (3.5 mm TRRS to K1, about $22) | Radio VOX | PTT = None / radio VOX, USB audio off, AFSK | No PTT line. VOX attack delay is covered by the 500 ms lead-in (raise to 700-800 ms if the start is clipped). Needs a headset jack or a USB-C headset adapter. |
-| [BTECH APRS-K1 PRO](https://baofengtech.com/product/aprs-k1-pro/) (USB-C to K1, about $34) | Keys itself when it hears audio ("Auto PTT", sensitivity dial) | PTT = None / radio VOX, USB audio on, AFSK | The "PTT only" test will not key it, so use a tone test. Its 2 reviews both report RF pickup problems (one stuck transmitting); use a ferrite bead, keep the radio apart, set the radio's TX time-out timer. |
-| DigiRig Mobile | Software, serial RTS or DTR | PTT = RTS or DTR, USB audio on | Recommended, and the only option here where the app controls keying. Best choice for an unattended relay. |
+| [BTECH APRS-K1 PRO](https://baofengtech.com/product/aprs-k1-pro/) (one-piece USB-C to K1, about $34) | Keys itself when it hears audio ("Auto PTT", sensitivity dial) | PTT = None / radio VOX (the radio's own VOX **off**), USB audio on, **MT63** | **Tested:** transmits cleanly, but its USB chip has built-in noise cancelling that cuts received signals by about 20 dB after 0.7 s and cannot be turned off, so only MT63 decodes (radio volume mid range; full volume clips). Fine as a transmit-only cable. Set the dial with a tone test (*PTT only* will not key it); reviews report RF pickup, so use ferrite chokes. |
+| DigiRig Mobile (+ its Baofeng K1 cable set, DigiRig rev 1.6 or later) | Software, serial RTS | PTT = RTS, USB audio on | Recommended: no audio processing, and the app controls keying. Best choice for an unattended relay. Next to be tested. |
 | Radio with a built-in KISS TNC (BTECH UV-PRO, Vero VR-N76) | The radio | Radio link = Bluetooth/KISS TNC | No audio cable. See the TNC section below. |
 
-Speed is set by the radio's audio path (roughly 300-3000 Hz, pre-emphasis, limiter), not the cable: plan on
-**1200 baud AFSK**. 9600 baud does not pass a handheld's microphone input. With the auto-level circuits in the K1 cables,
-prefer AFSK over OFDM, which is more sensitive to level changes (untested).
+Speed is set by the radio's audio path (roughly 300-3000 Hz, pre-emphasis, limiter), not the cable: 9600 baud does not
+pass a handheld's microphone input. **Avoid USB-C headset-style cables and adapters with noise cancelling** ("ENC", "call
+noise reduction") for receiving: they wreck every modem but MT63, and the log shows a WARNING when HamLink detects one.
+On Windows, set the radio interface's microphone level to about 50-60 (100 overloads many USB interfaces).
 
 ## Wiring and bring-up (Baofeng + DigiRig Mobile)
 1. DigiRig Mobile -> Baofeng cable (Kenwood 2-pin K1). Plug DigiRig into the phone's USB-C port.
@@ -226,7 +234,9 @@ Exercised by hand: start-up, Settings, a grid-square position, OpenStreetMap til
 Start/Stop, sending text with manual PTT, the modem switch, and a SALUTE report started by right-clicking the map.
 At start-up the app checks `hamlink_core.dll` and its API version and stops with a clear message if it is missing or
 mismatched; errors are written with stack traces to `%LOCALAPPDATA%\HamLink\error.log`. The DLL (zig, C and C++17, API
-version 7, 46 exports) imports only the Universal CRT and KERNEL32.
+version 10) imports only the Universal CRT and KERNEL32. Since then (0.2.1-0.2.2, by hand): offline map files (a USGS
+Topo sample drew, with tiles enlarged past its deepest zoom), Help, the Transmit panel in the Map view, SITREP station
+colours, and raw WASAPI capture of a USB radio interface.
 Android app (2026-11-02): built for the first time, with JDK 17, AGP 8.7.3 and NDK 27, into a 13 MB debug APK for
 arm64-v8a, armeabi-v7a and x86_64. It compiled with no Kotlin errors or warnings, including the NDK build of the C++
 OFDM and MT63 modems, and all 38 Kotlin `external` functions match the JNI library's exports. It offers the same five
@@ -248,22 +258,20 @@ on the cable (now bypassed by raw WASAPI capture), the Windows microphone level 
 test messages (at full volume the cable's input clipped and nothing decoded); AFSK, PSK and OFDM did not decode at any
 volume through that cable. The core now detects that last fault and warns in the log; Help explains the fixes.
 
-**Not verified**: on Android, USB audio and the USB-serial PTT line, the Bluetooth TNC link, voice clips; on Windows,
-the location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips, Test / Calibrate, KISS
-TNC mode; the apps' audio, Bluetooth
-and USB-serial behaviour with real hardware, and **nothing has touched a real radio**. In particular: Bluetooth SPP/virtual-COM connection to a
-real UV-PRO-class radio (based on third-party descriptions of how it works, not on a test), whether such a
-radio accepts these AX.25 frames as-is, FM limiter/pre-emphasis/squelch behaviour in the audio path, PTT
-latency, USB-audio routing and OS audio latency. Expect compile fixes and a debugging session on first bring-up.
+**Not verified**: AFSK, PSK and OFDM over a real radio (they need an interface without noise cancelling, such as a
+DigiRig); the USB-serial PTT line on either app; on Android, the Bluetooth TNC link and voice clips; on Windows, the
+location service (`Geolocator`), serial GPS, the tile disk cache when offline, voice clips, KISS TNC mode. In particular:
+Bluetooth SPP/virtual-COM connection to a real UV-PRO-class radio (based on third-party descriptions of how it works, not
+on a test), whether such a radio accepts these AX.25 frames as-is, and PTT latency with a DigiRig.
 
 Third-party code: Codec2 (LGPL-2.1) and the aicodix Rattlegram modem sources (permissive 0BSD-style license;
 see `third_party/aicodix/`). Rattlegram snapshot used: aicodix/rattlegram commit 4df0f3af3c6da63f0d70512392e80c7a31b72099.
 
 ## Known issues and open questions
 Things a reviewer may trip over, roughly in order of how likely they are to matter:
-1. **Android with real hardware.** The Android app runs and has exchanged messages acoustically, but USB audio routing
-   (DigiRig), the USB-serial PTT line and the Bluetooth TNC link are untested. The untested parts of both apps are
-   listed under *Status* above.
+1. **Radio interfaces.** Over Baofeng radios only MT63 has been proven, through a cable whose noise cancelling ruins the
+   other modems. AFSK, PSK and OFDM over radio, the DigiRig's serial PTT line and the Bluetooth TNC link are untested.
+   The untested parts of both apps are listed under *Status* above.
 2. **Broadcast reports are not acknowledged.** On a lossy link a report can be lost without the sender knowing. Map setup >
    *Repeat my reports* (off by default) sends 1 or 2 extra copies about 30 s apart (plus random spread); receivers drop the
    copies. Each copy is a transmission.
@@ -281,6 +289,8 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
    traffic track (608 before the prefilter and slicers) and 1001 from the flat one; details in `docs/DSP_IMPROVEMENTS.md`.
    The Linux test suite has not been re-run since that change. Further ideas (FEC) are in `docs/ROADMAP.md`.
 9. **Amateur use only.** No encryption, by design. Reports and messages are readable by anyone.
+10. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
+    SALUTE reports between the two through JS8Call's TCP API, with operator approval of HF transmissions by default.
 
 ## Licence
 HamLink is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License,
