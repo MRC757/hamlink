@@ -189,6 +189,25 @@ Notes: PTT test and calibration do not apply (there is no audio path). The radio
 settings apply. ACK timing assumes the TNC speed you select. Any KISS-over-Bluetooth-SPP TNC should work the
 same way; only the BTECH-style radios are documented here, and none of this has been tried on real hardware.
 
+## Raspberry Pi hilltop relay (planned)
+An unattended relay on a **Raspberry Pi Zero 2 W**: the unchanged core under a small Python service, set up from a phone
+browser on the Pi's own Wi-Fi hotspot, with a DigiRig or a Bluetooth KISS TNC radio. Full plan: `docs/RASPBERRY_PI.md`.
+* **If the Zero 2 W is too slow** (MT63's load is still to be measured), a Pi 3 A+ or Pi 4 runs the **same software
+  and SD card image**; only the power system grows.
+* **Solar and LFP battery** (estimates; a Baofeng-class radio at 5 W, a busy relay transmitting 5% of the time, 3 days
+  without sun, 2.5 winter sun hours):
+
+| Computer | Average draw | Energy per day | LFP battery (12.8 V) | Solar panel |
+|---|---|---|---|---|
+| Pi Zero 2 W | 2.4 W | 65 Wh | 20 Ah (30 Ah for 5 days) | 50-60 W |
+| Pi 3 A+ | 3.2 W | 87 Wh | 30 Ah (40 Ah) | 70-80 W |
+| Pi 4 | 4.9 W | 134 Wh | 40 Ah (60-100 Ah) | 100-120 W |
+
+  Building the site for the Pi 4 from the start (**100-120 W panel, 50 Ah LFP**) costs about twice the Zero's power
+  system, runs a Zero relay about 8-10 days without sun, and makes a later move to a Pi 4 a board swap. LFP must not be
+  charged below freezing: use a battery or controller with cold-charge protection on a winter hilltop. Assumptions and
+  the full table: `docs/RASPBERRY_PI.md`.
+
 ## Status: what was and wasn't verified
 Verified here (host build, 88 pytest tests plus a sanitizer-built C suite, all against the flat C API or the mesh layer through a simulated
 FM audio channel or a simulated byte link):

@@ -43,6 +43,63 @@ blocks, and Python is the quickest to build, change and debug on a Pi. Libraries
 | Power | 5 V, about 1-2 W for the Pi plus the radio | Plan the solar panel / battery for the radio's receive current; the Pi is the smaller load. |
 | Enclosure | Shielded or at least separated from the antenna; ferrite chokes on USB | RF getting into the Pi or the USB audio is the classic relay-site failure (and a stuck transmitter). Set the radio's **TX time-out timer** as a backstop. |
 
+## If the Zero 2 W is not powerful enough
+**Software: essentially no change.** The Pi Zero 2 W, Pi 3 A+, Pi 3 B+ and Pi 4 all run the same 64-bit Raspberry Pi OS
+and the same aarch64 build of the core, so the service, its settings and the SD card image move across unchanged. The
+differences are hardware only:
+* **Pi 3 A+** (quad Cortex-A53 at 1.4 GHz, 512 MB): the middle step, about 40% faster than the Zero 2 W for under twice
+  its power. Full-size USB-A port, so no OTG adapter for the DigiRig.
+* **Pi 4** (quad Cortex-A72, several times faster): needs a 3 A, 5 V supply and about 3-4 times the Zero's power.
+  Turning off HDMI and the LEDs saves a few tenths of a watt.
+* The Pi 5 is not recommended for a solar site: more power for speed a relay does not need.
+
+So the real cost of moving up is **power**: a bigger solar panel and battery (below).
+
+## Power: solar panel and LFP battery
+Estimates, to be checked with a USB power meter on the real hardware (phase 1). Assumptions:
+* Radio: Baofeng-class handheld on an 8 V battery eliminator, **receive 0.6 W** (battery save off, which a relay needs),
+  **transmit 12 W input** at 5 W RF. DigiRig 0.15 W. Pi averages: **Zero 2 W 1.0 W**, **Pi 3 A+ 1.8 W**, **Pi 4 3.5 W**,
+  headless with the Wi-Fi hotspot on.
+* Traffic: **light** = the relay transmits 1% of the time (about 15 min a day), **busy** = 5% (about 72 min a day).
+* DC-DC converters 87% efficient (12.8 V battery to 5 V for the Pi, to 8 V for the radio).
+* Battery: **LFP (LiFePO4), 12.8 V**, 85% of capacity used, covering **3 days without sun** (5 days for a site that is
+  hard to reach).
+* Solar: **2.5 peak sun hours** (a December day at mid-US latitudes, about 35-40 N, panel tilted for winter), 75% system
+  efficiency (charge controller, temperature, dirt, wiring), and a 1.5 x panel margin so the battery refills after a run
+  of cloudy days.
+
+| Computer | Traffic | Average draw | Energy per day | LFP battery, 3 days | LFP battery, 5 days | Solar panel |
+|---|---|---|---|---|---|---|
+| Pi Zero 2 W | light | 1.9 W | 52 Wh | 14 Ah | 24 Ah | 41 W |
+| Pi Zero 2 W | busy | 2.4 W | 65 Wh | 18 Ah | 30 Ah | 52 W |
+| Pi 3 A+ | light | 2.7 W | 74 Wh | 20 Ah | 34 Ah | 59 W |
+| Pi 3 A+ | busy | 3.2 W | 87 Wh | 24 Ah | 40 Ah | 70 W |
+| Pi 4 | light | 4.4 W | 121 Wh | 33 Ah | 55 Ah | 96 W |
+| Pi 4 | busy | 4.9 W | 134 Wh | 37 Ah | 62 Ah | 107 W |
+
+**Suggested equipment** (standard sizes, busy relay):
+
+| Computer | LFP battery (12.8 V) | Solar panel | Charge controller |
+|---|---|---|---|
+| Pi Zero 2 W | 20 Ah (3 days) or 30 Ah (5 days) | 50-60 W | 10 A, LFP charge profile |
+| Pi 3 A+ | 30 Ah or 40 Ah | 70-80 W | 10 A |
+| Pi 4 | 40 Ah or 60-100 Ah | 100-120 W | 10-15 A |
+
+**Recommendation: build the site for the Pi 4 from the start (100-120 W panel, 50 Ah LFP).** It is about twice the cost
+of the Zero's power system, but it runs a Zero 2 W relay for about 8-10 days without sun (544 Wh usable at 52-65 Wh a
+day), and moving to a Pi 4 later is then just a board swap on the hill, with no new power hardware.
+
+Notes for the site:
+* **LFP must not be charged below 0 C (32 F).** On a winter hilltop use a battery whose BMS blocks cold charging, or a
+  self-heating LFP battery, or a charge controller with a temperature sensor.
+* Set the controller's **low-voltage disconnect** (about 12.0 V for LFP) with automatic reconnect, so a flat battery
+  shuts the load off cleanly and the site comes back by itself when the sun returns. The read-only file system (phase 4)
+  makes the sudden power cut harmless to the Pi.
+* Higher transmit power changes the numbers a lot: at 5 W RF the radio's transmit share is already the biggest single
+  item on a busy relay. Low power (1 W RF, about 5 W input) cuts it by more than half where the path allows.
+* The figures for the radio come from typical handheld specifications, not measurements of your radio; measure receive
+  and transmit current at the site's supply voltage before buying.
+
 ## The service (`hamlinkd`)
 * **Links:** `audio` (DigiRig: ALSA in/out at 48 kHz, PTT on serial RTS or DTR, or VOX) and `tnc` (KISS over
   `/dev/rfcommN` or any serial port, with backoff and reconnect). Later: CM108 GPIO PTT (DigiRig Lite) and a Pi GPIO pin.
@@ -97,4 +154,4 @@ KISS server for Dire Wolf / Pat, JS8Call bridge (needs a bigger Pi), map and rep
 1. Measured receive load of MT63 and OFDM on the Zero 2 W (phase 0). If MT63 does not keep up, the relay offers it only
    on a Pi 3/4/5.
 2. Whether the UV-PRO-class radios keep a Bluetooth link up for days, and how fast they reconnect after power saving.
-3. Power budget and enclosure for the chosen site.
+3. Measured power of the actual radio and Pi (the sizing above uses typical figures), and the enclosure for the site.
