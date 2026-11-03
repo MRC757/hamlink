@@ -2,6 +2,8 @@
 """OFDM (COFDMTV) modem option, driven only through the flat hl_* API over the simulated FM channel."""
 import os
 import numpy as np
+import ctypes as C
+from hamlink import FS
 from test_api import A, N, run
 
 
@@ -74,3 +76,31 @@ def test_afsk_station_hears_ofdm_not_the_other_way_round():
     c, d = N("W1AAA", seed=1, modem=1), N("W2BBB", seed=3, modem=0)
     run([c, d], links(("W1AAA", "W2BBB")), 30, [(1.0, lambda t: A.hl_send(c.c, b"CQ", 1, msg, len(msg), 0, int(t * 1000)))])
     assert d.msgs == []                        # AFSK-mode D cannot decode OFDM
+
+
+def test_ofdm_decodes_quiet_input_as_well_as_loud():
+    """The sync detector once had an absolute power floor at about -47 dBFS: quieter packets (a radio's speaker
+    output, a laptop microphone) were never even detected, whatever their signal-to-noise ratio."""
+    tx = N("W1AAA", seed=1, modem=1)
+    msg = b"level test " * 8
+    assert A.hl_send(tx.c, b"CQ", 1, msg, len(msg), 0, 1000) >= 0
+    burst, t = None, 1000
+    while burst is None and t < 20000:
+        t += 20
+        A.hl_process_audio(tx.c, None, 0, t, 0.004)
+        k = C.c_int()
+        p = A.hl_poll_tx(tx.c, t, 0.5, C.byref(k))
+        if p and k.value:
+            burst = np.ctypeslib.as_array(p, shape=(k.value,)).astype(float)
+    assert burst is not None
+    rng = np.random.default_rng(7)
+    for level_dbfs in (-25, -45, -60):
+        rx = N("W2BBB", seed=3, modem=1)
+        sig = np.concatenate([np.zeros(FS), burst, np.zeros(2 * FS)])
+        sig *= 32768 * 10 ** (level_dbfs / 20) / np.sqrt(np.mean(burst ** 2))
+        sig += rng.normal(0, np.sqrt(np.mean(sig[FS:FS + len(burst)] ** 2)) / 10 ** (25 / 20), len(sig))  # 25 dB SNR
+        pcm = np.round(np.clip(sig, -32768, 32767)).astype(np.int16)
+        for i in range(0, len(pcm) - 960, 960):
+            seg = np.ascontiguousarray(pcm[i:i + 960])
+            A.hl_process_audio(rx.c, seg.ctypes.data, 960, 2000 + i // 48, 0.004)
+        assert [m[3] for m in rx.msgs] == [msg], f"no decode at {level_dbfs} dBFS"

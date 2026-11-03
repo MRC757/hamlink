@@ -57,7 +57,10 @@ public:
 	bool operator()(const cmplx *samples) {
 		cmplx P = cor(samples[search_pos + symbol_len] * conj(samples[search_pos + 2 * symbol_len]));
 		value R = value(0.5) * pwr(norm(samples[search_pos + 2 * symbol_len]));
-		value min_R = 0.00001 * symbol_len;
+		// HamLink: was 0.00001 (about -47 dBFS), which hid every packet received below that level, as is common
+		// from a radio's speaker output or a laptop microphone. 1e-9 (about -87 dBFS) still keeps digital silence
+		// and int16 rounding noise (about -101 dBFS) from triggering; the timing metric itself is level-independent.
+		value min_R = 1e-9 * symbol_len;
 		R = std::max(R, min_R);
 		value timing = match(norm(P) / (R * R));
 		value phase = align(arg(P));
