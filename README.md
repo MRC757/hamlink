@@ -19,6 +19,33 @@ start a report there.
 
 ![HamLink map view](hamlink/docs/screenshots/windows-map.jpg)
 
+## Screenshots (Android)
+
+<table>
+<tr>
+<td width="50%"><img src="hamlink/docs/screenshots/android-map.jpg" alt="HamLink Android map view" width="340"></td>
+<td width="50%"><img src="hamlink/docs/screenshots/android-messages.png" alt="HamLink Android messages view" width="340"></td>
+</tr>
+<tr>
+<td><b>Map</b> (dark mode). A SALUTE report ("Hostile: 5 vehicles, digging in") placed by long-pressing the map, the
+phone's GPS position, and buttons to send a position or start a report.</td>
+<td><b>Messages.</b> Test tones and messages sent from the phone over Baofeng radios: MT63 test messages, then a switch
+to PSK 2400. <b>?</b> opens Help; the modem can be changed live from the header.</td>
+</tr>
+<tr>
+<td width="50%"><img src="hamlink/docs/screenshots/android-salute.png" alt="HamLink Android SALUTE report form" width="340"></td>
+<td width="50%"><img src="hamlink/docs/screenshots/android-sitrep.png" alt="HamLink Android Station SITREP form" width="340"></td>
+</tr>
+<tr>
+<td><b>SALUTE report.</b> Assessment, size, activity, location (typed, the phone's position, or <i>Pick on map</i>),
+equipment and time, sent to everyone in range.</td>
+<td><b>Station SITREP.</b> Conditions at the operator's location (A/B/C, which also colours the station on the map),
+home/mobile/portable, then optional power, water, sanitation, medical, communications and transportation.</td>
+</tr>
+</table>
+
+GPS coordinates are blurred in these screenshots.
+
 ## What it does
 * **Five modems on the audio link:** AFSK 1200 baud (Bell 202 + HDLC, the default); OFDM (COFDMTV, from Rattlegram);
   **PSK 2400** and **PSK 3600** (QPSK / 8-PSK, about 2x and 2.4x the throughput of AFSK; 3600 needs a strong signal);
@@ -29,23 +56,30 @@ start a report there.
 * **FX.25 error correction on AFSK**, on by default: repairs damaged bytes in each frame (up to 8, 16 or 32 depending on
   the setting), while stations without FX.25 still read frames that arrive intact.
 * **Voice as store-and-forward clips** (Codec2 700C): a 5 s clip is about 500 bytes.
-* **Reports on a map:** position and SALUTE reports, coloured by the reporter's assessment, fading with age. Report types
-  are JSON files (`hamlink/schemas/`), so adding one needs no code.
-* **Station SITREP:** a nine-field drop-down status report (conditions, state, home/mobile/portable, then power, water,
-  sanitation, medical, grid communications and transportation, which may be omitted when all is OK).
+* **Reports on a map:** position and SALUTE reports; SALUTE icons take the reporter's assessment colour, each station
+  the colour of its latest SITREP, and icons fade with age. Report types are JSON files (`hamlink/schemas/`), so adding
+  one needs no code. **Offline map files** (MBTiles) work with no internet; `hamlink/tools/make_mbtiles.py` builds one
+  from USGS topo maps or your own tile server.
+* **Station SITREP:** an eight-field status report (conditions, home/mobile/portable, then power, water, sanitation,
+  medical, grid communications and transportation, which may be omitted when all is OK).
+* **Built-in Help** on both apps: equipment for each modem, offline maps, troubleshooting.
 * **Receiver tested on real packet audio:** on the WA8LMF TNC Test CD it decodes 971 error-free frames from the
   de-emphasised traffic track and 1001 from the flat one, with no false frames from an hour of noise.
 
 ## Status
-Review build 0.2.0. **The Windows app builds and runs on Windows 11**; messages, the map and reports have been used on
-one PC. **Not yet tested:** two stations exchanging messages, any real radio, and the Android app, which has never been
-compiled. Bug reports with the exact error text are the most useful feedback right now. Windows logs errors with stack
-traces to `%LOCALAPPDATA%\HamLink\error.log`.
+Review build 0.2.2. **The Windows app runs on Windows 11 and the Android app on a phone.** The two have exchanged
+messages, reports and relayed traffic, and **MT63** messages over **Baofeng radios**. The cable used for that radio test
+has built-in noise cancelling that only MT63 survives, so **AFSK, PSK and OFDM over radio** still need testing with a
+DigiRig or another interface without audio processing. Bug reports with the exact error text are the most useful feedback
+right now. Windows logs errors with stack traces to `%LOCALAPPDATA%\HamLink\error.log`.
 
-## Download (Windows)
-Get `HamLink-<version>-win-x64.zip` from the newest release on the [Releases page](https://github.com/MRC757/hamlink/releases), unzip
-it anywhere and run `HamLink.exe`. Nothing to install: .NET is included, and it runs on an air-gapped PC. The program is
-not code-signed, so Windows SmartScreen may warn the first time: choose *More info > Run anyway*.
+## Download
+From the newest release on the [Releases page](https://github.com/MRC757/hamlink/releases):
+* **Windows:** `HamLink-<version>-win-x64.zip`. Unzip it anywhere and run `HamLink.exe`. Nothing to install: .NET is
+  included, and it runs on an air-gapped PC. The program is not code-signed, so Windows SmartScreen may warn the first
+  time: choose *More info > Run anyway*.
+* **Android 8.0+:** `HamLink-<version>-android.apk`. Open it on the phone and allow *Install unknown apps*. It is a test
+  build signed with a development key, not a Play Store release.
 
 ## Build and run from source (Windows)
 Needs the .NET 8 or 9 SDK and internet access once, for NuGet.
@@ -71,7 +105,9 @@ with no radio to a DigiRig on the air.
 | [hamlink/windows/README.md](hamlink/windows/README.md) | Windows build, DigiRig setup, KISS TNC, maps |
 | [hamlink/docs/TESTING.md](hamlink/docs/TESTING.md) | Staged test plan, from no radio to on the air |
 | [hamlink/docs/PROTOCOL.md](hamlink/docs/PROTOCOL.md) | On-air format |
-| [hamlink/docs/MAPS_AND_REPORTS.md](hamlink/docs/MAPS_AND_REPORTS.md) | Positions, SALUTE, map behaviour |
+| [hamlink/docs/MAPS_AND_REPORTS.md](hamlink/docs/MAPS_AND_REPORTS.md) | Positions, SALUTE, SITREP, map behaviour |
+| [hamlink/docs/OFFLINE_MAPS.md](hamlink/docs/OFFLINE_MAPS.md) | Offline map files and where to get them |
+| [hamlink/docs/help/HELP.md](hamlink/docs/help/HELP.md) | The in-app Help: equipment, offline maps, troubleshooting |
 | [hamlink/docs/DSP_IMPROVEMENTS.md](hamlink/docs/DSP_IMPROVEMENTS.md) | Receiver design and Test CD results |
 
 ## Licence
