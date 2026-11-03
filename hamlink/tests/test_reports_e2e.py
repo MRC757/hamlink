@@ -185,7 +185,8 @@ def test_repeat_delivers_after_the_first_copy_is_lost_and_receiver_sees_it_once(
     assert len(reports_from(b, "W1AAA")) == 1                       # second copy arrived; third dropped as duplicate
     assert len([r for r in snap(b, 120_000) if r[0] == "C"]) == 1
     assert sum("REPEAT" in e for e in a.events) == 2
-    assert air["W1AAA"] < 6.0                                       # three single-frame bursts plus ID: a few seconds
+    # three single-frame bursts plus ID: a few seconds (4.7 s without FX.25; FX.25, on by default, makes it 6.7 s)
+    assert air["W1AAA"] < 8.0
 
 
 def test_repeat_skips_addressed_reports_and_can_be_cancelled():

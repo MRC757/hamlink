@@ -42,13 +42,17 @@ def test_ofdm_voice_clip_through_hidden_node_relay():
     assert any("RELAY" in e for e in r["nodes"][1].events)
 
 
-def test_ofdm_beats_afsk_on_a_marginal_link():
-    """At 7 dB SNR the 1200 baud AFSK loses most frames; OFDM's polar code still gets through."""
+def test_ofdm_and_afsk_fx25_both_deliver_on_a_marginal_link():
+    """At 7 dB SNR both get a 500-byte acknowledged message through.
+
+    When this test was written, plain AFSK lost most frames here and OFDM's polar code won. Since then AFSK gained the
+    900-2500 Hz prefilter, a second slicer and FX.25 (on by default), and on this channel model it now delivers further
+    down than OFDM (seed 4: AFSK + FX.25 delivered at 5 dB, OFDM failed below 7 dB). Both must keep delivering here."""
     ofdm = deliver(modem=1, snr=7, size=500, seconds=200, seed=4)
     afsk = deliver(modem=0, snr=7, size=500, seconds=200, seed=4)
     assert ofdm["delivered"] and ofdm["intact"]
     assert ofdm["retries"] <= 1
-    assert (not afsk["delivered"]) or afsk["retries"] > ofdm["retries"]
+    assert afsk["delivered"] and afsk["intact"]
 
 
 def test_ofdm_airtime_is_comparable_to_afsk_on_a_clean_link():

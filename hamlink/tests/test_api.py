@@ -102,7 +102,7 @@ def test_voice_clip_through_relay_using_only_flat_api():
 
 
 def test_send_error_codes_and_version():
-    assert A.hl_api_version() == 7
+    assert A.hl_api_version() == 10
     a = N("W1AAA")
     assert A.hl_send(a.c, b"W2BBB", 1, b"x" * 4000, 4000, 1, 0) == -3   # too big
     assert A.hl_send(a.c, b"W2BBB", 9, b"x", 1, 1, 0) == -1             # bad type

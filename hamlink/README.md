@@ -308,7 +308,14 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
    traffic track (608 before the prefilter and slicers) and 1001 from the flat one; details in `docs/DSP_IMPROVEMENTS.md`.
    The Linux test suite has not been re-run since that change. Further ideas (FEC) are in `docs/ROADMAP.md`.
 9. **Amateur use only.** No encryption, by design. Reports and messages are readable by anyone.
-10. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
+10. **Carrier detect in open-squelch hiss.** The AFSK data-carrier detect briefly mistakes hiss for data about 1-2% of
+    the time (about 3% in the seconds after a burst, with or without the receive prefilter), so a transmission now and
+    then waits a moment longer. Decoding is unaffected, and with the squelch closed the receiver hears silence and it
+    does not happen.
+11. **OFDM vs AFSK sensitivity claims need re-measuring.** The "OFDM decodes 4-6 dB deeper than AFSK" figures above and
+    in the apps' modem notes date from before FX.25 and the receive prefilter. In a recent simulation run (one noise
+    seed) AFSK with FX.25 delivered a 500-byte acknowledged message down to 5 dB SNR and OFDM only down to 7 dB.
+12. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
     SALUTE reports between the two through JS8Call's TCP API, with operator approval of HF transmissions by default.
 
 ## Licence
