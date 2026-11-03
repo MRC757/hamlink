@@ -192,9 +192,14 @@ Notes: PTT test and calibration do not apply (there is no audio path). The radio
 settings apply. ACK timing assumes the TNC speed you select. Any KISS-over-Bluetooth-SPP TNC should work the
 same way; only the BTECH-style radios are documented here, and none of this has been tried on real hardware.
 
-## Raspberry Pi hilltop relay (planned)
-An unattended relay on a **Raspberry Pi Zero 2 W**: the unchanged core under a small Python service, set up from a phone
-browser on the Pi's own Wi-Fi hotspot, with a DigiRig or a Bluetooth KISS TNC radio. Full plan: `docs/RASPBERRY_PI.md`.
+## Raspberry Pi hilltop relay (built; not yet tried on a Pi)
+An unattended relay on a **Raspberry Pi Zero 2 W**: the unchanged core under a small Python service (`pi/`, the
+`hamlinkd` service), set up from a phone browser on the Pi's own Wi-Fi hotspot, with a DigiRig or a Bluetooth KISS
+TNC radio.
+* **What is built:** the service, the web page, Bluetooth pairing, hilltop hardening, an install script and an SD card
+  image build. All of it is tested in CI on ARM64, including a real install under systemd.
+* **Still to do:** a run on a real Pi with a DigiRig and radios.
+* **Details:** setup is in `pi/README.md`; the full plan is in `docs/RASPBERRY_PI.md`.
 * **If the Zero 2 W is too slow** (MT63's load is still to be measured), a Pi 3 A+ or Pi 4 runs the **same software
   and SD card image**; only the power system grows.
 * **Solar and LFP battery** (estimates; a Baofeng-class radio at 5 W, a busy relay transmitting 5% of the time, 3 days

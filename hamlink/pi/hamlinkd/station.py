@@ -80,7 +80,7 @@ class Recorder:
 class Station:
     def __init__(self, settings, lib, audio=None, ptt=None, tnc=None, state_dir=".", log=None, seed=None):
         self.s = settings
-        self.log_sink = log or (lambda line: print(line, flush=True))
+        self.log_sink = log or print_entry
         self.events = collections.deque(maxlen=300)
         self.messages = collections.deque(maxlen=100)
         self.cmds = queue.Queue()
@@ -115,9 +115,9 @@ class Station:
 
     # ---- logging and callbacks (service thread)
     def log(self, text, kind="event"):
-        line = time.strftime("%Y-%m-%d %H:%M:%S ") + text
-        self.events.append({"t": time.time(), "kind": kind, "text": text})
-        self.log_sink(line)
+        e = {"t": time.time(), "kind": kind, "text": text}
+        self.events.append(e)
+        self.log_sink(e)
 
     def _on_message(self, src, dst, typ, data):
         if typ == hl.TYPE_TEXT:
@@ -331,7 +331,16 @@ class Station:
             st["tnc_connected"] = self.tnc.connected()
         if now_ms >= self.next_health:
             self.next_health = now_ms + 30_000
-            self.health = system_health()
+            old, self.health = self.health, system_health()
+            for key, text in (("undervoltage_now", "supply voltage is LOW (battery, cable or regulator)"),
+                              ("throttled_now", "the CPU is throttled (heat or low voltage)"),
+                              ("hot", "the CPU is above 80 °C")):
+                if key == "hot":
+                    now_on, was_on = self.health.get("cpu_temp_c", 0) > 80, old.get("cpu_temp_c", 0) > 80
+                else:
+                    now_on, was_on = self.health.get(key, False), old.get(key, False)
+                if now_on and not was_on:
+                    self.log("WARNING: " + text, "error")
         st.update(self.health)
         self._status = st
 
@@ -347,8 +356,12 @@ class Station:
                  (f"{self.s.modem}, {self.audio.description}, PTT {self.ptt.description}" if self.s.link == "audio"
                   else self.tnc.description))
         try:
+            n = 0
             while not stop_event.is_set():
                 self.step(int((time.monotonic() - t0) * 1000) + 1000)
+                n += 1
+                if n % 100 == 0:
+                    sd_notify("WATCHDOG=1")  # systemd restarts the service if this loop stalls
                 stop_event.wait(0.02)
         finally:
             self.running = False
@@ -368,6 +381,25 @@ class Station:
         if self.recorder:
             self.recorder.close()
         self.core.close()
+
+
+def print_entry(e):
+    print(time.strftime("%Y-%m-%d %H:%M:%S ", time.localtime(e["t"])) + e["text"], flush=True)
+
+
+def sd_notify(msg):
+    """systemd notification (Type=notify, WatchdogSec); does nothing outside systemd."""
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return
+    import socket
+    if addr.startswith("@"):
+        addr = "\0" + addr[1:]
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.sendto(msg.encode(), addr)
+    except OSError:
+        pass
 
 
 def system_health():

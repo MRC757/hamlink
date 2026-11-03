@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HamLink relay</title>
+<style>
+:root { --bg:#f6f6f4; --fg:#1b1b1b; --card:#fff; --line:#ddd; --muted:#666; --acc:#1d5fae; --ok:#2e7d32; --warn:#b26a00; --bad:#c62828; }
+@media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#e4e4e4; --card:#1e1e1e; --line:#333; --muted:#9a9a9a; --acc:#7fb0ef; --ok:#66bb6a; --warn:#ffb74d; --bad:#ef5350; } }
+* { box-sizing:border-box; }
+body { margin:0; font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+header { display:flex; align-items:center; gap:.6em; padding:.6em 1em; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+header h1 { font-size:1.1em; margin:0; flex:1; }
+nav { display:flex; overflow-x:auto; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:2.9em; z-index:2; }
+nav button { flex:none; border:0; background:none; color:var(--muted); padding:.7em .9em; font:inherit; border-bottom:3px solid transparent; }
+nav button.on { color:var(--fg); border-bottom-color:var(--acc); }
+main { max-width:44em; margin:auto; padding:1em; }
+section { display:none; } section.on { display:block; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1em; margin-bottom:1em; }
+.badge { padding:.15em .6em; border-radius:1em; font-size:.85em; font-weight:600; color:#fff; background:var(--muted); }
+.badge.ok { background:var(--ok); } .badge.warn { background:var(--warn); } .badge.bad { background:var(--bad); }
+table { width:100%; border-collapse:collapse; } td { padding:.3em .2em; border-bottom:1px solid var(--line); vertical-align:top; }
+td:first-child { color:var(--muted); width:45%; }
+label { display:block; margin:.8em 0 .2em; font-weight:600; }
+.help { color:var(--muted); font-size:.85em; margin:.15em 0 0; }
+input[type=text], input[type=password], input[type=number], select, textarea { width:100%; padding:.55em; font:inherit; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+button.act { padding:.6em 1.1em; font:inherit; border-radius:6px; border:1px solid var(--acc); background:var(--acc); color:#fff; margin:.6em .4em 0 0; }
+button.act.sec { background:none; color:var(--acc); }
+.err { color:var(--bad); white-space:pre-wrap; } .note { color:var(--warn); }
+.meter { height:1.1em; background:var(--line); border-radius:4px; overflow:hidden; } .meter div { height:100%; background:var(--ok); width:0; transition:width .3s; }
+#log { font:13px/1.35 ui-monospace,Consolas,monospace; white-space:pre-wrap; max-height:65vh; overflow-y:auto; }
+#log .error { color:var(--bad); } #log .rx { color:var(--ok); } #log .tx { color:var(--acc); }
+.msg { border-bottom:1px solid var(--line); padding:.4em 0; } .msg small { color:var(--muted); }
+.row { display:flex; gap:.5em; align-items:center; } .row > * { flex:1; }
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header><h1 id="title">HamLink relay</h1><span id="state" class="badge">…</span></header>
+
+<div id="auth" class="hidden"><main><div class="card">
+  <h2 id="auth-title">Log in</h2>
+  <p id="auth-text" class="help"></p>
+  <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+  <div id="pw2-row" class="hidden"><label for="pw2">Again</label><input id="pw2" type="password" autocomplete="new-password"></div>
+  <button class="act" id="auth-go">Log in</button>
+  <p id="auth-err" class="err"></p>
+</div></main></div>
+
+<div id="app" class="hidden">
+<nav id="tabs">
+  <button data-t="status" class="on">Status</button><button data-t="messages">Messages</button><button data-t="log">Log</button>
+  <button data-t="settings">Settings</button><button data-t="test">Test</button><button data-t="bluetooth">Bluetooth</button>
+  <button data-t="help">Help</button>
+</nav>
+<main>
+<section id="t-status" class="on">
+  <div id="setup-note" class="card hidden"><b>Not configured yet.</b> <span id="setup-problems"></span><br>Open <b>Settings</b>, enter the callsign and the radio link, and save.</div>
+  <div class="card" id="lvl-card"><div class="row"><span>Input level</span><span style="flex:3"><div class="meter"><div id="lvl"></div></div></span><span id="lvl-db" style="flex:none;min-width:5em;text-align:right">–</span></div></div>
+  <div class="card"><table id="status-table"></table></div>
+</section>
+
+<section id="t-messages">
+  <div class="card">
+    <div class="row"><div><label for="to">To</label><input id="to" type="text" value="CQ" autocapitalize="characters"></div></div>
+    <label for="text">Message</label><textarea id="text" rows="3"></textarea>
+    <label><input id="ack" type="checkbox" checked> Ask for an acknowledgement (not for CQ)</label>
+    <button class="act" id="send">Send</button> <span id="send-res"></span>
+  </div>
+  <div class="card"><h3>Received</h3><div id="msgs"><p class="help">Nothing yet.</p></div></div>
+</section>
+
+<section id="t-log"><div class="card"><div id="log"></div></div></section>
+
+<section id="t-settings">
+  <div id="ro-note" class="card note hidden">The file system is read-only (hilltop mode): changes made here last until the next reboot. Turn read-only mode off to make them permanent (see the relay's README).</div>
+  <div class="card"><div id="form"></div>
+    <button class="act" id="save">Save and restart the radio</button>
+    <p id="save-res"></p></div>
+  <div class="card"><h3>Web page password</h3>
+    <label for="old-pw">Current password</label><input id="old-pw" type="password" autocomplete="current-password">
+    <label for="new-pw">New password (8 or more characters)</label><input id="new-pw" type="password" autocomplete="new-password">
+    <button class="act sec" id="chg-pw">Change password</button> <button class="act sec" id="logout">Log out</button>
+    <p id="pw-res"></p></div>
+</section>
+
+<section id="t-test">
+  <div class="card">
+    <p>Transmits a 10 second tone (audio link). Watch the other station's level meter and adjust <b>Transmit level</b> in Settings.
+      Use <b>PTT only</b> to check keying. The station ID follows each test.</p>
+    <button class="act" data-tone="alt">1200/2200 alternating</button><button class="act" data-tone="1200">1200 Hz</button>
+    <button class="act" data-tone="2200">2200 Hz</button><button class="act sec" data-tone="ptt">PTT only</button>
+    <p id="tone-res"></p>
+  </div>
+  <div class="card"><h3>Receive meter</h3><p class="help">While the other station sends its test tone.</p><table id="meter-table"></table></div>
+</section>
+
+<section id="t-bluetooth">
+  <div class="card">
+    <p>For a radio with a built-in KISS TNC (UV-PRO and similar). Put the radio in pairing mode, scan, pair, then <b>Use</b> it.</p>
+    <button class="act" id="bt-scan">Scan (12 s)</button><button class="act sec" id="bt-list">Refresh list</button>
+    <p id="bt-res"></p><table id="bt-table"></table>
+  </div>
+</section>
+
+<section id="t-help"><div class="card"><p><a href="/help" target="_blank">Open the HamLink help</a> (equipment, modems, troubleshooting).</p>
+  <p class="help">Command line on the Pi: <code>hamlinkd --status</code>, <code>hamlinkd --log</code>, <code>journalctl -u hamlinkd -f</code>.</p></div></section>
+</main>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let tab = "status", logSeq = 0, timer = null, settingsCache = null;
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-HamLink": "1" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  let j = {};
+  try { j = await r.json(); } catch (e) { j = { ok: false, error: "HTTP " + r.status }; }
+  if (r.status === 401) { showAuth(); throw new Error("log in first"); }
+  return j;
+}
+function el(tag, text, cls) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; }
+function rows(table, pairs) { table.replaceChildren(...pairs.map(([k, v]) => { const tr = el("tr"); tr.append(el("td", k), el("td", v)); return tr; })); }
+function fmt(v) { return typeof v === "boolean" ? (v ? "yes" : "no") : (v === undefined || v === null || v === "" ? "–" : String(v)); }
+
+// ---- login / first-run password
+async function start() {
+  const s = await (await fetch("/api/session")).json();
+  if (s.callsign) $("title").textContent = "HamLink relay " + s.callsign;
+  if (s.logged_in) return showApp();
+  showAuth(!s.password_set);
+}
+function showAuth(first) {
+  clearInterval(timer);
+  $("app").classList.add("hidden"); $("auth").classList.remove("hidden");
+  $("auth-title").textContent = first ? "Set a password" : "Log in";
+  $("auth-text").textContent = first ? "First visit: choose the password for this page (8 or more characters). Anyone on the relay's network who has it can change the relay's settings." : "";
+  $("pw2-row").classList.toggle("hidden", !first);
+  $("auth-go").textContent = first ? "Set password" : "Log in";
+  $("auth-go").onclick = async () => {
+    $("auth-err").textContent = "";
+    if (first && $("pw").value !== $("pw2").value) { $("auth-err").textContent = "The two passwords differ."; return; }
+    const r = await fetch(first ? "/api/setup-password" : "/api/login", { method: "POST", headers: { "Content-Type": "application/json", "X-HamLink": "1" }, body: JSON.stringify({ password: $("pw").value }) });
+    const j = await r.json();
+    if (j.ok) { $("pw").value = $("pw2").value = ""; showApp(); } else $("auth-err").textContent = j.error;
+  };
+}
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("auth-go").click(); });
+function showApp() {
+  $("auth").classList.add("hidden"); $("app").classList.remove("hidden");
+  const t = document.querySelector('#tabs button[data-t="' + location.hash.slice(1) + '"]');  // e.g. /#settings
+  if (t) t.click();
+  refresh(); clearInterval(timer); timer = setInterval(refresh, 2000);
+}
+
+// ---- tabs
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  tab = b.dataset.t;
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("main section").forEach(s => s.classList.toggle("on", s.id === "t-" + tab));
+  if (tab === "settings") loadSettings();
+  if (tab === "bluetooth") btList();
+  refresh();
+});
+
+// ---- periodic refresh: status always (header badge), plus the open tab
+async function refresh() {
+  try {
+    const st = (await api("/api/status")).status || {};
+    showStatus(st);
+    if (tab === "log") await pollLog();
+    if (tab === "messages") await loadMessages();
+  } catch (e) { /* shown by the badge */ }
+}
+function showStatus(st) {
+  const b = $("state");
+  let label = st.state || "?", cls = "bad";
+  if (st.state === "running") { label = st.transmitting ? "TRANSMITTING" : st.channel_busy ? "BUSY" : "LISTENING"; cls = st.transmitting ? "warn" : "ok"; }
+  b.textContent = label; b.className = "badge " + cls;
+  $("setup-note").classList.toggle("hidden", st.state !== "not configured");
+  $("setup-problems").textContent = (st.problems || []).join("; ");
+  if (st.callsign) $("title").textContent = "HamLink relay " + st.callsign;
+  const m = st.meter || {};
+  $("lvl-card").classList.toggle("hidden", st.meter === undefined);
+  const db = m.rms_dbfs;
+  $("lvl").style.width = db === undefined ? "0" : Math.max(0, Math.min(100, (db + 80) * 1.25)) + "%";
+  $("lvl-db").textContent = db === undefined ? "–" : db.toFixed(0) + " dBFS";
+  const s = st.stats || {};
+  const pairs = st.state === "running" ? [
+    ["Link", st.link === "tnc" ? st.tnc + (st.tnc_connected ? "" : " (not connected)") : st.audio],
+    ["Modem", st.modem], ["Relay", fmt(st.relay)], ["PTT", st.ptt ? st.ptt + (st.ptt_ready ? "" : " (NOT READY)") : undefined],
+    ["Audio input", st.audio_alive === undefined ? undefined : st.audio_alive ? "receiving" : "STOPPED"],
+    ["Queued to send", st.pending_tx], ["Transmitted, last hour", fmt(st.tx_seconds_last_hour) + " s"],
+    ["Frames heard / sent", (s.rx_frames ?? "–") + " / " + (s.tx_frames ?? "–")],
+    ["Relayed / not needed", (s.relayed ?? "–") + " / " + (s.relay_suppressed ?? "–")], ["Retries", s.retries],
+    ["Uptime", st.uptime_s === undefined ? undefined : Math.floor(st.uptime_s / 3600) + " h " + Math.floor(st.uptime_s % 3600 / 60) + " min"],
+  ] : [["State", st.state], ["Error", st.error]];
+  if (st.cpu_temp_c !== undefined) pairs.push(["CPU temperature", st.cpu_temp_c + " °C"]);
+  if (st.undervoltage_now !== undefined) pairs.push(["Supply voltage", st.undervoltage_now ? "LOW NOW" : st.undervoltage_since_boot ? "was low since boot" : "OK"]);
+  if (st.throttled_now) pairs.push(["CPU", "THROTTLED"]);
+  rows($("status-table"), pairs.filter(p => p[1] !== undefined).map(([k, v]) => [k, fmt(v)]));
+  rows($("meter-table"), [["Level", m.rms_dbfs === undefined ? "–" : m.rms_dbfs + " dBFS"], ["Peak", fmt(m.peak_dbfs) + " dBFS"],
+    ["1200 Hz", fmt(m.tone1200_dbfs) + " dBFS"], ["2200 Hz", fmt(m.tone2200_dbfs) + " dBFS"], ["Clipped samples", fmt(m.clipped)]]);
+}
+
+// ---- log and messages
+async function pollLog() {
+  const j = await api("/api/log?since=" + logSeq);
+  const box = $("log"), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+  for (const e of j.events || []) {
+    logSeq = Math.max(logSeq, e.seq);
+    box.append(el("div", new Date(e.t * 1000).toLocaleTimeString() + "  " + e.text, e.kind));
+  }
+  while (box.childElementCount > 500) box.firstChild.remove();
+  if (atEnd) box.scrollTop = box.scrollHeight;
+}
+async function loadMessages() {
+  const j = await api("/api/messages");
+  const list = (j.messages || []).slice().reverse();
+  if (!list.length) return;
+  $("msgs").replaceChildren(...list.map(m => { const d = el("div", undefined, "msg"); d.append(el("small", new Date(m.t * 1000).toLocaleString() + "  " + m.src + " > " + m.dst), el("div", m.text)); return d; }));
+}
+$("send").onclick = async () => {
+  const j = await api("/api/send", { to: $("to").value, text: $("text").value, ack: $("ack").checked });
+  $("send-res").textContent = j.ok ? "queued (message " + j.id + ")" : j.error;
+  $("send-res").className = j.ok ? "" : "err";
+  if (j.ok) $("text").value = "";
+};
+
+// ---- settings
+async function loadSettings() {
+  const [j, dev] = await Promise.all([api("/api/settings"), api("/api/devices").catch(() => ({}))]);
+  settingsCache = j;
+  $("ro-note").classList.toggle("hidden", !j.read_only_root);
+  const root = $("form"); root.replaceChildren();
+  for (const f of j.form) {
+    const v = j.values[f.name], id = "f-" + f.name;
+    const form = el("div"); form.dataset.name = f.name; root.append(form);
+    let input;
+    if (f.type === "bool") {
+      const lab = el("label"); input = el("input"); input.type = "checkbox"; input.checked = v; input.id = id;
+      lab.append(input, " " + f.label); form.append(lab);
+    } else {
+      const lab = el("label", f.label); lab.htmlFor = id; form.append(lab);
+      if (f.choices) {
+        input = el("select"); for (const c of f.choices) { const o = el("option", String(c)); o.value = String(c); input.append(o); }
+        input.value = String(v);
+      } else {
+        input = el("input"); input.type = "text"; input.value = v;
+        const opts = { audio_in: dev.audio_in, audio_out: dev.audio_out, ptt_port: dev.serial }[f.name];
+        if (opts && opts.length) { const dl = el("datalist"); dl.id = id + "-l"; for (const o of opts) { const op = el("option"); op.value = o; dl.append(op); } form.append(dl); input.setAttribute("list", dl.id); }
+      }
+      input.id = id; form.append(input);
+    }
+    form.append(el("p", f.help, "help"));
+  }
+  $("f-link").onchange = showLinkFields; showLinkFields();
+  $("save-res").textContent = (j.problems || []).length ? "To fix: " + j.problems.join("; ") : "";
+  $("save-res").className = "err";
+}
+const AUDIO_ONLY = ["modem", "audio_in", "audio_out", "ptt", "ptt_port", "tx_level", "preamble_ms", "afsk_fec", "carrier_sense", "busy_threshold", "record_rx", "record_max_mb"];
+const TNC_ONLY = ["tnc_port", "tnc_baud"];
+function showLinkFields() {
+  const tncLink = $("f-link").value === "tnc";
+  document.querySelectorAll("#form > div").forEach(d => d.classList.toggle("hidden",
+    tncLink ? AUDIO_ONLY.includes(d.dataset.name) : TNC_ONLY.includes(d.dataset.name)));
+}
+$("save").onclick = async () => {
+  const values = {};
+  for (const f of settingsCache.form) { const i = $("f-" + f.name); values[f.name] = f.type === "bool" ? i.checked : i.value; }
+  const j = await api("/api/settings", { values });
+  $("save-res").textContent = j.ok ? "Saved. The radio is restarting." : (j.problems || [j.error]).join("; ");
+  $("save-res").className = j.ok ? "" : "err";
+};
+$("chg-pw").onclick = async () => {
+  const j = await api("/api/password", { old: $("old-pw").value, new: $("new-pw").value });
+  $("pw-res").textContent = j.ok ? "Password changed." : j.error; $("pw-res").className = j.ok ? "" : "err";
+  $("old-pw").value = $("new-pw").value = "";
+};
+$("logout").onclick = async () => { await api("/api/logout", {}); showAuth(false); };
+
+// ---- test tone
+document.querySelectorAll("[data-tone]").forEach(b => b.onclick = async () => {
+  const j = await api("/api/test_tone", { mode: b.dataset.tone });
+  $("tone-res").textContent = j.ok ? "Transmitting for 10 s…" : j.error; $("tone-res").className = j.ok ? "" : "err";
+});
+
+// ---- Bluetooth
+function btShow(devs) {
+  const t = $("bt-table"); t.replaceChildren();
+  for (const d of devs || []) {
+    const tr = el("tr"), name = el("td", d.name + (d.paired ? " (paired)" : "")), act = el("td");
+    name.append(el("div", d.address, "help"));
+    const b = el("button", d.paired ? "Use" : "Pair", "act sec");
+    b.onclick = async () => {
+      if (!d.paired) { $("bt-res").textContent = "Pairing…"; const j = await api("/api/bluetooth/pair", { address: d.address }); $("bt-res").textContent = j.ok ? "Paired." : j.error; return btList(); }
+      const j = await api("/api/settings", { values: { link: "tnc", tnc_port: "bt:" + d.address } });
+      $("bt-res").textContent = j.ok ? "The relay now uses " + d.name + " (TNC link). Restarting." : (j.problems || [j.error]).join("; ");
+    };
+    act.append(b); tr.append(name, act); t.append(tr);
+  }
+}
+async function btList() { const j = await api("/api/bluetooth"); if (j.ok) btShow(j.devices); else $("bt-res").textContent = j.error; }
+$("bt-list").onclick = btList;
+$("bt-scan").onclick = async () => {
+  $("bt-res").textContent = "Scanning…";
+  const j = await api("/api/bluetooth/scan", {});
+  $("bt-res").textContent = j.ok ? "" : j.error; if (j.ok) btShow(j.devices);
+};
+
+start();
+</script>
+</body>
+</html>

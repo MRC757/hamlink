@@ -1,0 +1,60 @@
+# Raspberry Pi relay files for a release: the prebuilt ARM64 core library (install.sh downloads it, so a Pi Zero 2 W
+# need not compile) and the ready-to-flash SD card image. On a published release they are attached to it; run by
+# hand, they are kept as workflow artifacts, or attached to the release named in "tag".
+name: pi-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the files to (blank: workflow artifacts only)"
+        required: false
+        default: ""
+      image:
+        description: "Also build the SD card image"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  pi:
+    runs-on: ubuntu-24.04-arm
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      BUILD_IMAGE: ${{ github.event_name == 'release' || inputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # the source tree goes into the image: no token in .git/config
+
+      - name: Build the core library (aarch64)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential cmake
+          cmake -S hamlink -B "$RUNNER_TEMP/build" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/build" --target hamlink_api -j"$(nproc)"
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$RUNNER_TEMP/build/core/libhamlink_api.so" "$RUNNER_TEMP/out/libhamlink_api-linux-aarch64.so"
+          file "$RUNNER_TEMP/out/libhamlink_api-linux-aarch64.so"
+
+      - name: Build the SD card image
+        if: env.BUILD_IMAGE == 'true'
+        run: |
+          version="${TAG:-$(git rev-parse --short HEAD)}"
+          sudo bash hamlink/pi/build_image.sh "$RUNNER_TEMP/out" "$version" "$RUNNER_TEMP/out/libhamlink_api-linux-aarch64.so"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hamlink-pi
+          path: ${{ runner.temp }}/out/
+          compression-level: 0
+
+      - name: Attach to the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/out/* --clobber --repo "$GITHUB_REPOSITORY"

@@ -72,3 +72,15 @@ jobs:
             hamlink/build/core/libhamlink_api.so
             hamlink/bench.txt
           if-no-files-found: warn
+
+  # install.sh for real on an ARM64 Ubuntu machine, then the running systemd service checked end to end.
+  pi-install:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: install.sh
+        run: sudo HAMLINK_SRC_DIR="$GITHUB_WORKSPACE" HAMLINK_BUILD=1 bash hamlink/pi/install.sh
+      - name: Check the running service
+        run: bash hamlink/pi/tests/install_check.sh

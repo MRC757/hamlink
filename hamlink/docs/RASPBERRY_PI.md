@@ -5,12 +5,24 @@ Status (2026-11-03): **phase 0 done except the measurement on a real Pi.** `.git
 passed on both). `tools/bench_modems.py` measures each modem's CPU load; on the ARM64 runner (a fast server core, not a
 Pi) every modem's receiver used 0.8-1.4% of one core and decoded every test message. Next: run it on a Zero 2 W.
 
-**Phase 1 written, not yet run on a Pi:** `hamlink/pi` holds the `hamlinkd` service (audio link with serial or VOX
-PTT, and the KISS TNC link too), the CLI, the systemd unit and `install.sh`; see `hamlink/pi/README.md`. Its tests run
-three stations through a simulated channel in one process (A and B out of range, R relaying) on AFSK and PSK, plus
-the transmit limits, the TNC link and the control port; CI runs them on x86-64 and ARM64. It has also run on a PC
-sound card. Still to do on hardware: install on a Zero 2 W with a DigiRig, measure CPU, and relay between two radios.
-The install script builds the core on the Pi until a release carries the prebuilt `libhamlink_api-linux-aarch64.so`.
+**Phases 1-4: everything that does not need the hardware is built and tested** (`hamlink/pi`, see
+`hamlink/pi/README.md`). That is the service, the web page, the Bluetooth link and pairing, hardening, the install
+script and the SD card image build.
+
+Tested so far:
+* **Simulated stations:** three stations in one process, A and B out of range of each other, R relaying (AFSK and
+  PSK). Also the transmit limits, the TNC link, and the web page over HTTP (first-run password, login protections,
+  settings, sending).
+* **CI on GitHub's ARM64 Ubuntu machines:** these tests, plus a real `install.sh` run whose systemd service is then
+  checked end to end, watchdog included.
+* **A PC sound card:** the service has run on one.
+
+**Waiting for hardware:**
+* phase 0's CPU measurement on a Zero 2 W;
+* the DigiRig link on the air;
+* the Bluetooth link against a UV-PRO-class radio (the RFCOMM connection and pairing are untested);
+* the hotspot and the image booting on a real Pi;
+* phase 5.
 
 Target: an **unattended hilltop relay** on a **Raspberry Pi Zero 2 W**, set up and checked from a **web browser**, working
 with a **DigiRig** (audio + serial PTT, every modem) or a **radio with a built-in Bluetooth KISS TNC** (AFSK 1200 only;
@@ -39,7 +51,8 @@ the radio does the modem). A relay re-sends what it hears so that stations that 
 **Language: Python 3** for the service, calling the core through ctypes (the tests' `tests/hamlink.py` and
 `tools/replay_wav.py` already do this). The signal processing stays in C, so Python's speed does not matter at 20 ms audio
 blocks, and Python is the quickest to build, change and debug on a Pi. Libraries: `sounddevice` (PortAudio/ALSA),
-`pyserial`, `aiohttp` (web server and WebSocket); all in Raspberry Pi OS or pip.
+`pyserial`, and the standard library's HTTP server for the web page (no web framework, to save the Zero's memory);
+all in Raspberry Pi OS or pip.
 
 ## Hardware
 
@@ -127,9 +140,10 @@ Notes for the site:
 Kept small: a relay is configured on the hill once and then checked now and then.
 * **Status:** link, audio level, channel busy, frames heard / relayed / suppressed, uptime, CPU temperature, supply
   voltage warnings (`vcgencmd get_throttled`), last error.
-* **Log:** recent messages, relays and events, live (WebSocket).
-* **Settings:** callsign, link (DigiRig or Bluetooth TNC: pick a paired radio), modem, PTT, TX level, hop limit, ID
-  interval, Wi-Fi hotspot name and password.
+* **Log:** recent messages, relays and events, live (the page polls every 2 s).
+* **Settings:** callsign, link (DigiRig or Bluetooth TNC: pick a paired radio on the Bluetooth tab), modem, PTT, TX
+  level, hop limit, limits. The hotspot's name and password are set with `harden.sh --hotspot` over SSH: changing
+  them needs root, which the service deliberately does not have.
 * **Test / Calibrate:** PTT-only and tone tests and the receive meter, as in the other apps.
 * **Help:** renders `docs/help/HELP.md`, as the apps do.
 * **Not needed for a relay:** the map and report forms (a relay forwards reports without drawing them). They can come
@@ -138,7 +152,8 @@ Kept small: a relay is configured on the hill once and then checked now and then
   start; HTTPS with a self-signed certificate later.
 
 **Field access:** the Pi runs a Wi-Fi access point (`hamlink-relay`). On the hill, join it with a phone and open
-`http://hamlink.local` (or `http://10.42.0.1`). Optionally it can join a known Wi-Fi network instead when one is in range.
+`http://10.42.0.1` (or `http://hamlink-relay.local`). Optionally it joins a known Wi-Fi network instead when one is in
+range (`harden.sh --client`).
 
 ## Phases
 
@@ -147,15 +162,15 @@ Kept small: a relay is configured on the hill once and then checked now and then
 | 0 | **Core on ARM64** | `libhamlink_api.so` built for aarch64 by GitHub Actions (native ARM64 runners) with the pytest suite run there; a benchmark script for every modem's receive and transmit load | No (benchmark: yes) |
 | 1 | **Service, DigiRig link** | `hamlinkd` with audio, serial PTT, relay on, ID, logging, recording, settings, CLI, systemd unit, install script | Yes |
 | 2 | **Bluetooth TNC link** | rfcomm pairing helper, KISS link with reconnect, tested against a UV-PRO-class radio | Yes + radio |
-| 3 | **Web interface** | Status, log, settings, test/calibrate, Help, password | Yes |
+| 3 | **Web interface** | Status, log, settings, test/calibrate, Bluetooth pairing, Help, password | No (built and tested in CI) |
 | 4 | **Hilltop hardening** | Read-only root file system, hardware watchdog, transmit-time limits, access point, throttling and temperature alarms, an SD card image | Yes |
 | 5 | **Field trial** | Two stations out of range of each other talking through the relay; logs and recordings from the hill | Yes + radios |
 
 Later options: remote status over the radio itself (care needed: remote control of a station has its own rules),
 KISS server for Dire Wolf / Pat, JS8Call bridge (needs a bigger Pi), map and reports for a Pi field station.
 
-## Installation (planned)
-Three stages, from developer-friendly (phase 1) to plug-and-play (phase 4).
+## Installation
+Both are built; `hamlink/pi/README.md` has the steps. Neither has been tried on a real Pi yet.
 
 ### 1. Install script (phase 1)
 On **Raspberry Pi OS Lite (64-bit)**:
@@ -170,18 +185,23 @@ On **Raspberry Pi OS Lite (64-bit)**:
    * creates a Python environment owned by a dedicated `hamlink` user, with access to audio, serial ports, GPIO and
      Bluetooth;
    * installs and starts the **systemd service**, which starts at power-on and restarts if it stops.
-4. `sudo hamlinkd --setup` asks for the callsign, radio link (DigiRig or a paired Bluetooth radio), modem and PTT.
-   From phase 3 this is also on the web page.
+4. Open `http://<hostname>.local/`, choose the page password, and enter the callsign and radio link; or
+   `sudo hamlinkd --setup` over SSH.
 
 Updates: run the script again, or `sudo hamlinkd --update` (fetches the newest release, keeps the settings, restarts).
 
 ### 2. Ready-made SD card image (phase 4, for the hill)
 1. Download `hamlink-relay-<version>.img.xz` from the GitHub release and write it with Raspberry Pi Imager.
-2. Boot: the Pi starts its own Wi-Fi hotspot `hamlink-relay`.
-3. Join it with a phone, open `http://hamlink.local`, set callsign, radio link and password.
+2. Boot: the Pi starts its own Wi-Fi hotspot `hamlink-relay` (password `hamlink-setup`; change it).
+3. Join it with a phone, open `http://10.42.0.1/`, set the page password, callsign and radio link.
 
-The image includes the read-only file system, watchdog and transmit-time limits. Updates make the file system writable
-briefly, apply, and lock it again (from the web page or the CLI, on the hotspot).
+`.github/workflows/pi-release.yml` builds it with `hamlink/pi/build_image.sh`: Raspberry Pi OS Lite (64-bit), plus
+`install.sh`, plus `harden.sh` (watchdog, RAM-only logs, no swap, hotspot, Wi-Fi country). The same workflow attaches
+the ARM64 library that `install.sh` downloads.
+
+Read-only mode is **not** on in the image, because the first setup has to be saved. Turn it on afterwards with
+`harden.sh --read-only`. While it is on, every change is lost at reboot, so turn it off (`--writable`) to change or
+update anything.
 
 ### 3. Possibly later: a Debian package
 `apt install hamlink` from a project repository, for Pis that also run other software.

@@ -28,7 +28,7 @@ class Settings:
     ptt: str = "rts"               # none (radio VOX / auto-PTT cable), rts, dtr
     ptt_port: str = ""             # serial port for RTS/DTR ("" = the only one present, e.g. /dev/ttyUSB0)
     # TNC link
-    tnc_port: str = "/dev/rfcomm0" # Bluetooth (rfcomm) or USB serial port of the radio's KISS TNC
+    tnc_port: str = "/dev/rfcomm0" # bt:AA:BB:CC:DD:EE:FF (a paired radio), /dev/rfcommN, or a USB serial port
     tnc_baud: int = 1200           # the TNC's on-air speed, for airtime estimates
     # safety and housekeeping
     max_tx_seconds: float = 180.0  # longest single transmission allowed (MT63 messages are long)
@@ -36,7 +36,8 @@ class Settings:
     record_rx: bool = False        # write received audio to WAV files (troubleshooting)
     record_dir: str = ""           # "" = <state dir>/recordings
     record_max_mb: int = 500
-    control_port: int = 8737       # localhost control port (CLI now, web page later)
+    control_port: int = 8737       # localhost control port (the CLI)
+    web_port: int = 80 if sys.platform != "win32" else 8080   # the web page; 0 turns it off
     log_file: str = ""             # "" = log to the console / systemd journal only
 
     def problems(self):
@@ -56,7 +57,58 @@ class Settings:
             p.append("carrier_sense must be off, data or data_or_level")
         if not 0.01 <= self.tx_level <= 1.0:
             p.append("tx_level must be 0.01..1")
+        if self.link == "tnc" and self.tnc_port.startswith("bt:") and not BT_RE.fullmatch(self.tnc_port):
+            p.append("tnc_port bt: needs a Bluetooth address, e.g. bt:38:D2:00:01:02:03 (optionally :channel)")
+        if not 0 < self.max_tx_percent <= 100 or not 0 < self.max_tx_seconds <= 600:
+            p.append("max_tx_percent must be 0..100 and max_tx_seconds 0..600")
+        if self.ttl not in range(0, 8) or not 0 <= self.preamble_ms <= 3000:
+            p.append("ttl must be 0..7 and preamble_ms 0..3000")
         return p
+
+
+BT_RE = re.compile(r"bt:([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(:\d{1,2})?")
+
+# For the web page's settings form: (name, label, choices or None, help). Fields not listed are file-only.
+FORM = [
+    ("callsign", "Callsign", None, "This relay's callsign; it is also sent as the station ID."),
+    ("link", "Radio link", ["audio", "tnc"], "audio: DigiRig or another USB sound card. tnc: a radio's KISS TNC."),
+    ("modem", "Modem", ["afsk", "ofdm", "mt63", "psk2400", "psk3600"],
+     "Audio link only. Every station on the channel must use the same modem."),
+    ("relay", "Relay", None, "Re-send messages for stations that cannot hear each other."),
+    ("ttl", "Max relay hops", None, "For messages this station originates."),
+    ("audio_in", "Audio input", None, "Part of the device name; blank for the default."),
+    ("audio_out", "Audio output", None, "Part of the device name; blank for the default."),
+    ("ptt", "PTT", ["rts", "dtr", "none"], "rts for a DigiRig; none when the radio uses VOX."),
+    ("ptt_port", "PTT serial port", None, "Blank: the only USB serial port."),
+    ("tx_level", "Transmit level", None, "0.01 to 1. Set with the test tone and the other station's meter."),
+    ("preamble_ms", "PTT lead-in (ms)", None, "Raise it if the start of each transmission is cut off."),
+    ("afsk_fec", "FX.25 check bytes", [0, 16, 32, 64], "AFSK error correction; 16 is the default."),
+    ("carrier_sense", "Carrier sense", ["data_or_level", "data", "off"], "Wait for a clear channel before sending."),
+    ("busy_threshold", "Busy level", None, "Input level treated as a busy channel (data_or_level)."),
+    ("tnc_port", "TNC", None, "bt:<address> of a paired radio (see Bluetooth), /dev/rfcomm0, or a USB serial port."),
+    ("tnc_baud", "TNC on-air speed", None, "1200 for AFSK 1200."),
+    ("max_tx_seconds", "Longest transmission (s)", None, "Longer ones are dropped."),
+    ("max_tx_percent", "Transmit share of an hour (%)", None, "The relay holds its queue beyond this."),
+    ("record_rx", "Record received audio", None, "WAV files for troubleshooting (uses SD card space)."),
+    ("record_max_mb", "Recording space (MB)", None, "Oldest files are deleted beyond this."),
+]
+
+
+def from_form(current, data):
+    """A copy of current with the form's values applied and converted to each field's type."""
+    s = dataclasses.replace(current)
+    types = {f.name: type(getattr(current, f.name)) for f in dataclasses.fields(Settings)}
+    for name, _, _, _ in FORM:
+        if name not in data:
+            continue
+        v, t = data[name], types[name]
+        if t is bool:
+            v = v if isinstance(v, bool) else str(v).lower() in ("1", "true", "yes", "on")
+        else:
+            v = t(v)
+        setattr(s, name, v)
+    s.callsign = (s.callsign or "").strip().upper()
+    return s
 
 
 def load(path=DEFAULT_PATH):

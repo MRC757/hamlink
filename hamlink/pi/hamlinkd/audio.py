@@ -14,7 +14,7 @@ BLOCK = 960  # 20 ms
 
 
 class SoundDeviceAudio:
-    blocking = True  # play() returns when the audio has been played
+    blocking = False  # play() starts playback; transmitting() says when it has finished
 
     def __init__(self, in_name="", out_name="", log=None):
         import sounddevice as sd  # imported here so tests and the TNC link do not need PortAudio
@@ -99,12 +99,15 @@ class SoundDeviceAudio:
     # ---- transmit
     def play(self, pcm):
         try:
-            self.sd.play(pcm, FS, device=self.out_dev, blocking=True)
+            self.sd.play(pcm, FS, device=self.out_dev)
         except Exception:
-            self.sd.play(np.column_stack([pcm, pcm]), FS, device=self.out_dev, blocking=True)  # stereo-only device
+            self.sd.play(np.column_stack([pcm, pcm]), FS, device=self.out_dev)  # stereo-only device
 
     def transmitting(self):
-        return False
+        try:
+            return bool(self.sd.get_stream().active)
+        except Exception:
+            return False
 
 
 class Air:

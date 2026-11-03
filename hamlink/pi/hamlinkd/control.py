@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Localhost control: one JSON object per line in, one per line out, on 127.0.0.1:<control_port>.
 
-Requests: {"cmd": "status"} | {"cmd": "log", "n": 50} | {"cmd": "messages"} |
+Requests: {"cmd": "status"} | {"cmd": "log", "n": 50, "since": 0} | {"cmd": "messages"} | {"cmd": "restart"} |
           {"cmd": "send", "to": "CQ", "text": "...", "ack": true} | {"cmd": "test_tone", "mode": "alt"}
 Replies:  {"ok": true, ...} or {"ok": false, "error": "..."}
-Only localhost is served; the web page (phase 2) will sit in front of this with its own login.
+Only localhost is served. The web page (web.py) calls dispatch() directly, behind its own login.
 """
 import json
 import socket
@@ -14,40 +14,38 @@ import threading
 
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self):
-        st = self.server.station
+        svc = self.server.service
         for raw in self.rfile:
             try:
                 req = json.loads(raw.decode("utf-8"))
-                rep = dispatch(st, req)
+                rep = dispatch(svc, req)
             except Exception as e:
                 rep = {"ok": False, "error": str(e)}
             self.wfile.write((json.dumps(rep) + "\n").encode("utf-8"))
             self.wfile.flush()
 
 
-def _run_on_engine(st, fn, timeout=30):
-    ok, val = st.submit(fn).get(timeout=timeout)
-    if not ok:
-        raise val
-    return val
-
-
-def dispatch(st, req):
+def dispatch(svc, req):
+    """One request against a service.Service (shared by the control port and the web page)."""
     cmd = req.get("cmd")
     if cmd == "status":
-        return {"ok": True, "status": st.status()}
+        return {"ok": True, "status": svc.status()}
     if cmd == "log":
-        n = int(req.get("n", 50))
-        return {"ok": True, "events": list(st.events)[-n:]}
+        return {"ok": True, "events": svc.log_since(int(req.get("since", 0)), int(req.get("n", 200)))}
     if cmd == "messages":
-        return {"ok": True, "messages": list(st.messages)}
+        st = svc.station
+        return {"ok": True, "messages": list(st.messages) if st else []}
     if cmd == "send":
-        to, text, ack = req.get("to", "CQ"), req.get("text", ""), bool(req.get("ack", True))
-        msg_id = _run_on_engine(st, lambda s, now: s.send_text(to, text, ack and to.upper() != "CQ", now))
+        to = (req.get("to") or "CQ").strip().upper()
+        text, ack = req.get("text", ""), bool(req.get("ack", True))
+        msg_id = svc.call(lambda s, now: s.send_text(to, text, ack and to != "CQ", now))
         return {"ok": True, "id": msg_id}
     if cmd == "test_tone":
         mode = req.get("mode", "alt")
-        _run_on_engine(st, lambda s, now: s.start_test_tone(mode, now))
+        svc.call(lambda s, now: s.start_test_tone(mode, now))
+        return {"ok": True}
+    if cmd == "restart":
+        svc.restart()
         return {"ok": True}
     return {"ok": False, "error": f"unknown command {cmd!r}"}
 
@@ -57,10 +55,10 @@ class _Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
 
-def serve(station, port):
+def serve(service, port):
     """Starts the control server on a daemon thread; returns the server (shutdown() to stop)."""
     srv = _Server(("127.0.0.1", port), _Handler)
-    srv.station = station
+    srv.service = service
     threading.Thread(target=srv.serve_forever, name="control", daemon=True).start()
     return srv
 

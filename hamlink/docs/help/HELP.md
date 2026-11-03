@@ -60,6 +60,21 @@ Sizes: a town at zoom 8-15 is about 10 MB, a county at zoom 8-16 about 100 MB, a
 
 Map setup, **Tile server URL**: https:// works anywhere; plain http:// is allowed only to this device or the local network (for example http://192.168.1.20:8080/styles/basic/{z}/{x}/{y}.png from a laptop at a command post).
 
+## Raspberry Pi relay
+
+A Raspberry Pi running **hamlinkd** relays messages for stations that cannot hear each other. Set it to the same modem
+as the stations it serves.
+
+- **Setting it up**: join the relay's Wi-Fi hotspot (hamlink-relay) and open http://10.42.0.1/. Choose the page's
+  password on the first visit, then enter the callsign and radio link in **Settings**.
+- **Status tab**: LISTENING means the radio is running. It also shows any supply-voltage or temperature warning.
+- **Not configured**: the callsign or radio link is missing. Fix it in Settings.
+- **Error, retrying**: the sound card or radio was not found. The relay tries again every 10 seconds.
+- **Bluetooth radio**: on the Bluetooth tab, put the radio in pairing mode, **Scan**, **Pair**, then **Use**.
+- **Forgotten page password**: over SSH, run sudo hamlinkd --set-password.
+
+Full instructions: pi/README.md in the HamLink source.
+
 ## Troubleshooting
 
 ### Nothing is received

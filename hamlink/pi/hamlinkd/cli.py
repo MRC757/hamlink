@@ -11,6 +11,9 @@
   hamlinkd --check             check that the core library loads (used by install.sh)
   hamlinkd --check-config      check the settings file
   hamlinkd --update            fetch the newest version and restart (runs install.sh again)
+  hamlinkd --set-password      set the web page password
+  hamlinkd --pair-tnc          pair a radio's Bluetooth TNC
+The web page is on port 80 (web_port): http://<the Pi's name>.local/
 """
 import argparse
 import json
@@ -18,7 +21,7 @@ import os
 import signal
 import subprocess
 import sys
-import threading
+import time
 
 from . import control, settings as S
 
@@ -39,6 +42,8 @@ def main(argv=None):
     g.add_argument("--check", action="store_true")
     g.add_argument("--check-config", action="store_true")
     g.add_argument("--update", action="store_true")
+    g.add_argument("--set-password", action="store_true")
+    g.add_argument("--pair-tnc", action="store_true")
     a = ap.parse_args(argv)
 
     if a.setup:
@@ -54,6 +59,20 @@ def main(argv=None):
     if a.update:
         script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "install.sh")
         return subprocess.call(["bash", script])
+    if a.pair_tnc:
+        from . import bt
+        return bt.pair_interactive()
+    if a.set_password:
+        import getpass
+        from . import web
+        pw = getpass.getpass("New web page password (8 or more characters): ")
+        if pw != getpass.getpass("Again: "):
+            print("The two passwords differ.")
+            return 1
+        web.Auth(web.auth_path(a.config)).set_password(pw)
+        _hand_to_service_user(web.auth_path(a.config))
+        print("Password set.")
+        return 0
     cfg = S.load(a.config)
     if a.check_config:
         bad = cfg.problems()
@@ -84,40 +103,49 @@ def main(argv=None):
 
 
 def run(cfg, a):
-    from . import core, station
-    bad = cfg.problems()
-    if bad:
-        print(f"{a.config}: " + "; ".join(bad) + " (run hamlinkd --setup)", file=sys.stderr)
-        return 2
-    lib = core.load(core.find_library(a.lib))
+    """The service: the radio (rebuilt after settings changes and failures), the control port and the web page."""
+    from . import service, web
     log_file = open(cfg.log_file, "a", encoding="utf-8", buffering=1) if cfg.log_file else None
 
-    def sink(line):
+    def sink(e):
+        line = time.strftime("%Y-%m-%d %H:%M:%S ", time.localtime(e["t"])) + e["text"]
         print(line, flush=True)
         if log_file:
-            log_file.write(line + "\n")
+            log_file.write(line + "
+")
 
-    audio = ptt = tnc = None
-    if cfg.link == "audio":
-        from . import audio as au, ptt as pt
-        audio = au.SoundDeviceAudio(cfg.audio_in, cfg.audio_out)
-        ptt = pt.make(cfg.ptt, cfg.ptt_port, log=sink)
-    else:
-        from . import tnc as tn
-        tnc = tn.SerialTnc(cfg.tnc_port, log=sink)
-    st = station.Station(cfg, lib, audio=audio, ptt=ptt, tnc=tnc, state_dir=a.state_dir, log=sink)
-    srv = control.serve(st, cfg.control_port)
-    stop = threading.Event()
+    svc = service.Service(a.config, a.lib, a.state_dir, sink=sink)
+    srv = control.serve(svc, cfg.control_port)
+    site = None
+    if cfg.web_port:
+        try:
+            site = web.Web(svc, cfg.web_port, web.auth_path(a.config))
+            svc.log(f"web page on port {site.port}")
+        except OSError as e:
+            svc.log(f"web page not started (port {cfg.web_port}): {e}", "error")
     for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda *_: stop.set())
+        signal.signal(sig, lambda *_: svc.stop())
     try:
-        st.run(stop)
+        svc.run()
     finally:
         srv.shutdown()
-        st.log("stopped")
+        if site:
+            site.shutdown()
         if log_file:
             log_file.close()
     return 0
+
+
+def _hand_to_service_user(path):
+    """Files written by `sudo hamlinkd ...` must stay readable and replaceable by the service's own user."""
+    if sys.platform == "win32" or os.geteuid() != 0:
+        return
+    try:
+        import pwd
+        u = pwd.getpwnam("hamlink")
+        os.chown(path, u.pw_uid, u.pw_gid)
+    except (KeyError, OSError):
+        pass
 
 
 def list_devices():
@@ -170,7 +198,8 @@ def setup(path):
         print("Not saved: " + "; ".join(bad))
         return 1
     S.save(cfg, path)
-    print(f"Saved. Restart the service: sudo systemctl restart hamlinkd")
+    _hand_to_service_user(path)
+    print("Saved. A running service restarts the radio with these settings within a few seconds.")
     return 0
 
 

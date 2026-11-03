@@ -34,7 +34,7 @@ def make(lib, air, call, seed, **kw):
     s = settings.Settings(callsign=call, **kw)
     assert s.problems() == []
     lines = []
-    st = station.Station(s, lib, audio=air.station(call), ptt=FakePtt(), log=lines.append, seed=seed)
+    st = station.Station(s, lib, audio=air.station(call), ptt=FakePtt(), log=lambda e: lines.append(e["text"]), seed=seed)
     st.lines = lines
     return st
 
@@ -149,17 +149,16 @@ def test_tnc_link_delivers_with_ack(lib):
     assert [m["text"] for m in b.messages] == ["via the radio's TNC"]
 
 
-def test_control_dispatch(lib):
+def test_station_runs_commands_on_its_own_thread(lib):
     air = audio.Air()
     a = make(lib, air, "N0AAA", 11, relay=False)
     a.step(air.t_ms)
-    assert control.dispatch(a, {"cmd": "status"})["status"]["callsign"] == "N0AAA"
+    assert a.status()["callsign"] == "N0AAA"
     q = a.submit(lambda s, now: s.send_text("CQ", "from the web page", False, now))
     a.step(air.t_ms)
     ok, msg_id = q.get_nowait()
     assert ok and msg_id >= 0
-    assert control.dispatch(a, {"cmd": "nope"})["ok"] is False
-    assert any("from the web page" in e["text"] for e in control.dispatch(a, {"cmd": "log"})["events"])
+    assert any("from the web page" in e["text"] for e in a.events)
 
 
 def test_settings_round_trip_and_validation(tmp_path):
@@ -217,27 +216,32 @@ class BlockingLoopback:
         return False
 
 
-def test_real_time_service_with_tcp_control(lib):
+def test_real_time_service_with_tcp_control(lib, tmp_path):
     import threading
-    s = settings.Settings(callsign="N0AAA", relay=False, control_port=18737)
+    from hamlinkd import service
+    cfg = str(tmp_path / "hamlinkd.json")
+    settings.save(settings.Settings(callsign="N0AAA", relay=False, control_port=18737), cfg)
     snd, key = BlockingLoopback(), FakePtt()
-    st = station.Station(s, lib, audio=snd, ptt=key, log=lambda l: None, seed=5)
-    srv = control.serve(st, s.control_port)
-    stop = threading.Event()
-    th = threading.Thread(target=st.run, args=(stop,), daemon=True)
+    svc = service.Service(cfg, make_io=lambda c, log: (snd, key, None), sink=lambda e: None)
+    srv = control.serve(svc, 18737)
+    th = threading.Thread(target=svc.run, daemon=True)
     th.start()
     try:
-        rep = control.request(s.control_port, {"cmd": "send", "to": "CQ", "text": "real time"})
+        for _ in range(100):
+            if svc.status().get("state") == "running":
+                break
+            threading.Event().wait(0.05)
+        rep = control.request(18737, {"cmd": "send", "to": "CQ", "text": "real time"})
         assert rep["ok"] and rep["id"] >= 0
         for _ in range(200):
             if snd.played and not key.keyed:
                 break
-            stop.wait(0.05)
+            threading.Event().wait(0.05)
         assert snd.played and key.keys == 1 and not key.keyed
-        stat = control.request(s.control_port, {"cmd": "status"})["status"]
-        assert stat["callsign"] == "N0AAA" and stat["ptt"] == "none (VOX)"
+        stat = control.request(18737, {"cmd": "status"})["status"]
+        assert stat["callsign"] == "N0AAA" and stat["ptt"] == "none (VOX)" and stat["state"] == "running"
     finally:
-        stop.set()
+        svc.stop()
         th.join(5)
         srv.shutdown()
     assert not th.is_alive()
