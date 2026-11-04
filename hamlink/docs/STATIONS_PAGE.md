@@ -10,7 +10,8 @@ With **monitor mode** on, it also shows messages between *other* stations that t
 Decisions so far:
 * **Retention:** 5 days.
 * **CQ:** a separate "All stations (CQ)" entry holds the messages this station sent to CQ.
-* **Monitor mode:** planned below. Off by default.
+* **Monitor mode:** planned below (section 5). **Off by default.**
+* **Listen on all modems:** a second setting beside it (section 5a). **Off by default.**
 
 ## What the operator sees
 
@@ -156,6 +157,55 @@ which shows whether the relay is doing its job.
 Amateur traffic is unencrypted and public, so displaying it raises no issue. Monitor mode only listens: it never
 transmits, never ACKs, and does not change what the relay sends.
 
+## 5a. Listen on all modems (core change, same API version 11)
+
+**Today**, the receivers that run depend on the selected modem (`hl_process_audio`):
+
+| Modem | Decoded |
+|---|---|
+| AFSK 1200 | always |
+| OFDM | from the first time OFDM is selected until the radio stops |
+| MT63 | only while MT63 is selected |
+| PSK 2400 and 3600 | both, while either is selected |
+
+**With the setting on**, every receiver runs at once, whatever modem is selected for sending. Each modem's frames
+carry their own CRC, so extra receivers cannot produce false messages. A station hears traffic sent on any modem,
+which is useful for a relay, for monitoring, and when other stations have not agreed on a modem.
+
+### Core
+
+* `hl_set_listen_all(hl_ctx *c, int on)`: creates the OFDM, MT63 and PSK receivers if they do not exist yet; only the
+  receivers, not the transmitters. While it is on, `hl_process_audio` feeds them all. Turning it off returns to
+  today's rule.
+* **Transmit is unchanged:** the station still sends on its selected modem.
+* **Carrier sense:** while listening to all modems, "channel busy" includes every running receiver: AFSK carrier
+  detect, MT63 lock, PSK busy, and an OFDM busy signal. The OFDM signal is new; it is on from sync detection to the
+  end of the packet. Today only the selected modem's detector counts, and OFDM's never does.
+* **Relaying:** a relay that listens to all modems re-sends what it hears **on its own selected modem**, not the one
+  it arrived on. That is the simplest rule, but it converts traffic. This needs a decision before step 6; the
+  alternative, re-sending on the modem it arrived on, needs the frame to carry its modem through the queue.
+
+### What it does not do: replies on another modem
+
+Replies and acknowledgements go out on the station's own selected modem. If W1AAA sends on PSK 2400 and this station
+replies on MT63, W1AAA hears the reply only if it also listens to all modems. Otherwise its message is reported
+FAILED (no ACK) even though it arrived. The setting's description and the Help say so. Replying on the sender's modem
+automatically would be a protocol change and is not part of this plan.
+
+### Processor load
+
+Measured per receiver: 0.5-2.4% of one core on the Windows PC, 0.8-1.4% on GitHub's ARM64 machines, so roughly 5% of
+a core for all of them. Still to measure on a Pi Zero 2 W. `tools/bench_modems.py` gains an `--all` run with every
+receiver at once, so CI reports the combined load too.
+
+### Apps and Pi
+
+* **Setting:** **Listen on all modems (hear stations on any modem; replies still go out on yours)**, off by default,
+  beside Monitor in Settings (Windows and Android), and in the Pi relay's settings and web page.
+* **Received messages:** messages decoded by a modem other than the selected one are marked with that modem (for
+  example "via PSK 2400") on the Messages and Stations pages. This needs the callback to report which receiver
+  decoded the frame; it is added alongside the monitor callback.
+
 ## 6. Tests
 
 **Core (`tests/test_mesh.py` / `test_api.py`, simulated channel):**
@@ -164,7 +214,10 @@ transmits, never ACKs, and does not change what the relay sends.
 * a multi-part message reassembles at C;
 * with monitor off, C reports nothing (today's behaviour);
 * a message to C arrives intact while C is overhearing more than 8 other conversations, so the separate pool works;
-* relaying with monitor on is unchanged: same frames, same counts.
+* relaying with monitor on is unchanged: same frames, same counts;
+* listen on all modems: a station set to AFSK decodes messages from four senders on PSK 2400, PSK 3600, OFDM and MT63;
+  with the setting off it decodes none of them; with the setting on, channel busy is reported during each modem's
+  transmission.
 
 **Apps:**
 * unit tests for the message store: grouping by station, the CQ entry, the 5-day cutoff, saving and loading;
@@ -183,8 +236,8 @@ transmits, never ACKs, and does not change what the relay sends.
 | 2 | Windows Stations page | medium |
 | 3 | Android Stations page | medium |
 | 4 | Unread counts, search, map links | small |
-| 5 | Core monitor mode, API 11, core tests | medium |
-| 6 | Monitor setting and overheard display in both apps; Pi Traffic list | small-medium |
+| 5 | Core: monitor mode and listen on all modems, API 11, core tests, combined processor benchmark | medium |
+| 6 | Both settings (off by default) and overheard / other-modem display in both apps; Pi settings and Traffic list | small-medium |
 | 7 | Help section, README screenshot, release | small |
 
 Steps 1 to 4 are useful on their own and can be released before monitor mode.
