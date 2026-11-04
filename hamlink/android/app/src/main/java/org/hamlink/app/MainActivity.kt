@@ -5,6 +5,7 @@ import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Hub.theme = Settings(this).theme
         MessageStore.load(this)
+        StationsRead.load(this)
         setContent {
             val dark = when (Hub.theme) { THEME_DARK -> true; THEME_LIGHT -> false; else -> isSystemInDarkTheme() }
             // the app draws behind the status and navigation bars: their icons must contrast with our background
@@ -98,7 +100,9 @@ private fun App() {
     var text by remember { mutableStateOf("") }
     val recorder = remember { VoiceRecorder(ctx) }
     var recording by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf(0) } // 0 = messages, 1 = map
+    var tab by remember { mutableStateOf(0) } // 0 = messages, 1 = map, 2 = stations
+    var station by remember { mutableStateOf<String?>(null) } // the open conversation on the Stations tab
+    BackHandler(enabled = tab == 2 && station != null) { station = null }
 
     val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         val ok = if (settings.transport == "tnc") Build.VERSION.SDK_INT < 31 || granted[Manifest.permission.BLUETOOTH_CONNECT] == true
@@ -127,7 +131,7 @@ private fun App() {
     val on = Hub.phase != Hub.Phase.OFF
     // While the on-screen keyboard is up only the message list and the compose box are shown, so the text being
     // typed and the latest messages are not squeezed out by the header (the keyboard takes about half the screen).
-    val typing = WindowInsets.isImeVisible && tab == 0
+    val typing = WindowInsets.isImeVisible && (tab == 0 || (tab == 2 && station != null))
     // Android 15 draws apps edge to edge: keep clear of the status bar, navigation bar and keyboard.
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
         if (typing) {
@@ -224,10 +228,26 @@ private fun App() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
             FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Messages") })
             FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("Map") })
+            val unread = totalUnread(if (tab == 2) station else null).let { MessageStore.all.size; StationsRead.lastRead.size; it }
+            FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text(if (unread > 0) "Stations ($unread)" else "Stations") })
         }
         } // !typing
         if (tab == 1) {
-            Box(Modifier.weight(1f).fillMaxWidth()) { MapScreen(settings) }
+            Box(Modifier.weight(1f).fillMaxWidth()) { MapScreen(settings) { call -> station = call; dest = call; tab = 2 } }
+        } else if (tab == 2 && station == null) {
+            StationList(Modifier.weight(1f).fillMaxWidth()) { call -> station = call; dest = call }
+        } else {
+        if (tab == 2) {
+            val call = station!!
+            val onMap = Hub.mapItems.firstOrNull { it.type == 'S' && !it.self && it.name.equals(call, ignoreCase = true) }
+            StationConversation(call, Modifier.weight(1f).fillMaxWidth(), onBack = { station = null },
+                onShowOnMap = onMap?.let { st -> {
+                    Hub.camLat = st.lat; Hub.camLon = st.lon; Hub.camPlaced = true
+                    if (Hub.camZoom < 12f) Hub.camZoom = 12f
+                    Hub.selectedKey = st.key; Hub.selectedDetail = null
+                    RadioService.engine?.detail(st.key)
+                    tab = 1
+                } })
         } else {
         // ---- log
         val listState = rememberLazyListState()
@@ -251,6 +271,7 @@ private fun App() {
             }
         }
 
+        } // log
         // ---- compose
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(dest, { dest = it.uppercase().take(8); settings.dest = dest }, label = { Text("To") },
@@ -286,7 +307,7 @@ private fun App() {
                 contentAlignment = Alignment.Center
             ) { Text(if (recording) "Recording… release to send" else "Hold to record voice", color = if (recording) Color.White else MaterialTheme.colorScheme.onPrimary) }
         }
-        } // tab == 0
+        } // tab == 0, or a station's conversation
     }
 
     if (showSettings) SettingsDialog(settings,

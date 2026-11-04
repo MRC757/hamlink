@@ -227,4 +227,23 @@ internal static class Geo
         int n = NativeMethods.hl_geo_format(lat, lon, fmt, buf, buf.Length);
         return n > 0 ? System.Text.Encoding.ASCII.GetString(buf, 0, Math.Min(n, buf.Length - 1)) : "";
     }
+
+    const double Deg = Math.PI / 180.0;
+
+    /// <summary>Great-circle distance in metres: the same formula as core/geo.c geo_distance_m.</summary>
+    public static double DistanceM(double lat1, double lon1, double lat2, double lon2)
+    {
+        double p1 = lat1 * Deg, p2 = lat2 * Deg, dp = (lat2 - lat1) * Deg, dl = (lon2 - lon1) * Deg;
+        double a = Math.Sin(dp / 2) * Math.Sin(dp / 2) + Math.Cos(p1) * Math.Cos(p2) * Math.Sin(dl / 2) * Math.Sin(dl / 2);
+        return 6371008.8 * 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a));
+    }
+
+    /// <summary>Initial bearing in degrees 0-360: the same formula as core/geo.c geo_bearing_deg.</summary>
+    public static double BearingDeg(double lat1, double lon1, double lat2, double lon2)
+    {
+        double p1 = lat1 * Deg, p2 = lat2 * Deg, dl = (lon2 - lon1) * Deg;
+        double y = Math.Sin(dl) * Math.Cos(p2), x = Math.Cos(p1) * Math.Sin(p2) - Math.Sin(p1) * Math.Cos(p2) * Math.Cos(dl);
+        double b = Math.Atan2(y, x) / Deg;
+        return b < 0 ? b + 360.0 : b;
+    }
 }

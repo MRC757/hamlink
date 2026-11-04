@@ -28,7 +28,9 @@
                 <TextBlock x:Name="ModeText" Foreground="SteelBlue" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                     <RadioButton x:Name="ViewMsgBtn" Content="Messages" GroupName="view" IsChecked="True" Margin="0,0,14,0" Checked="OnViewChanged" />
-                    <RadioButton x:Name="ViewMapBtn" Content="Map" GroupName="view" Checked="OnViewChanged" />
+                    <RadioButton x:Name="ViewMapBtn" Content="Map" GroupName="view" Margin="0,0,14,0" Checked="OnViewChanged" />
+                    <RadioButton x:Name="ViewStationsBtn" Content="Stations" GroupName="view" Checked="OnViewChanged"
+                                 ToolTip="Messages one station at a time" />
                 </StackPanel>
             </StackPanel>
         </DockPanel>
@@ -104,6 +106,8 @@
                     PreviewMouseLeftButtonDown="OnTalkDown" PreviewMouseLeftButtonUp="OnTalkUp" LostMouseCapture="OnTalkLost" />
         </Grid>
 
+        <!-- stations view: covers the log only; the compose row below stays, addressed to the selected station -->
+        <Border x:Name="StationsHost" Grid.Row="2" Background="White" Visibility="Collapsed" />
         <!-- map view: covers the log and compose rows (not the manual PTT panel) when "Map" is selected -->
         <Border x:Name="MapHost" Grid.Row="2" Grid.RowSpan="2" Background="White" Visibility="Collapsed" />
     </Grid>

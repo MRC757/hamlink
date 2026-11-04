@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 
 /** The Map tab: map, position sources, situation reports. */
 @Composable
-fun MapScreen(settings: Settings) {
+fun MapScreen(settings: Settings, onOpenStation: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     // map pack (if set) in front of the tile server and its cache; rebuilt when Map setup changes either
     val (source, packError) = remember(settings.tileUrl, settings.tileOnline, settings.mapPackPath) {
@@ -83,6 +83,9 @@ fun MapScreen(settings: Settings) {
 
         Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Hub.selectedDetail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            val sel = Hub.selectedKey
+            if (sel != null && sel.startsWith("S:") && Hub.mapItems.none { it.key == sel && it.self })
+                OutlinedButton(onClick = { onOpenStation(sel.substring(2)) }) { Text("Messages") }
             if (running) Text("Long-press the map to report on that spot", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             Text(Hub.positionStatus, style = MaterialTheme.typography.bodySmall,
                 color = if (Hub.position == null) Color(0xFFEF6C00) else MaterialTheme.colorScheme.primary)

@@ -131,4 +131,6 @@ object Native {
 
     external fun voiceEncode(pcm8k: ShortArray, n: Int): ByteArray?
     external fun voiceDecode(clip: ByteArray): ShortArray?
+    /** Decodes a stored clip on a separate context: any thread but the engine's, radio running or not. */
+    external fun storedVoiceDecode(clip: ByteArray): ShortArray?
 }

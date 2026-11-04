@@ -12,6 +12,11 @@ internal sealed class MapPanel : Grid
     readonly Engine engine;
     readonly MapView map = new();
     readonly TextBlock detail = new() { TextWrapping = TextWrapping.Wrap };
+    readonly Button openStation = new() { Content = "Messages", Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 4, 0, 0),
+                                          HorizontalAlignment = HorizontalAlignment.Left, Visibility = Visibility.Collapsed };
+
+    /// <summary>"Messages" on a selected station: open its conversation on the Stations page.</summary>
+    public event Action<string>? OpenStation;
     readonly TextBlock posText = new() { TextWrapping = TextWrapping.Wrap };
     readonly TextBlock attribution = new() { Background = new SolidColorBrush(Color.FromArgb(204, 255, 255, 255)), Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
     readonly Button sendPos = new() { Content = "Send my position", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
@@ -53,6 +58,8 @@ internal sealed class MapPanel : Grid
 
         var bottom = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
         bottom.Children.Add(detail);
+        openStation.Click += (_, _) => { if (selectedKey is { } k && k.StartsWith("S:")) OpenStation?.Invoke(k[2..]); };
+        bottom.Children.Add(openStation);
         bottom.Children.Add(posText);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
         sendPos.Click += (_, _) => engine.SendPosition();
@@ -60,7 +67,7 @@ internal sealed class MapPanel : Grid
         var setup = new Button { Content = "Map setup...", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
         setup.Click += (_, _) => { if (new MapSetupWindow(settings) { Owner = Window.GetWindow(this) }.ShowDialog() == true) { engine.SetReportRepeat(settings.ReportRepeat); Refresh(); } };
         var clear = new Button { Content = "Clear map", Padding = new Thickness(14, 5, 14, 5) };
-        clear.Click += (_, _) => { engine.ClearMap(); selectedKey = null; detail.Text = ""; map.SetSelected(null); };
+        clear.Click += (_, _) => { engine.ClearMap(); selectedKey = null; detail.Text = ""; openStation.Visibility = Visibility.Collapsed; map.SetSelected(null); };
         buttons.Children.Add(sendPos); buttons.Children.Add(newReport); buttons.Children.Add(setup); buttons.Children.Add(clear);
         bottom.Children.Add(buttons);
         bottom.Children.Add(new TextBlock
@@ -76,10 +83,24 @@ internal sealed class MapPanel : Grid
         Positions.Changed += () => Dispatcher.BeginInvoke(() => Refresh());
         engine.MapUpdated += items => Dispatcher.BeginInvoke(() =>
         {
+            lastItems = items;
             map.SetItems(items);
             if (selectedKey != null) engine.RequestDetail(selectedKey, d => Dispatcher.BeginInvoke(() => { if (selectedKey != null) detail.Text = d ?? ""; }));
         });
         Refresh();
+    }
+
+    IReadOnlyList<MapItem> lastItems = Array.Empty<MapItem>();
+
+    /// <summary>Selects and centres a station (the Stations page's "Show on map").</summary>
+    public void ShowStation(string call, IReadOnlyList<MapItem> items)
+    {
+        if (lastItems.Count == 0 && items.Count > 0) { lastItems = items; map.SetItems(items); } // map just opened
+        var it = lastItems.FirstOrDefault(i => i.Type == 'S' && string.Equals(i.Name, call, StringComparison.OrdinalIgnoreCase));
+        if (it == null) return;
+        map.CenterOn(it.Lat, it.Lon, Math.Max(map.CamZoom, 12));
+        map.SetSelected(it.Key);
+        OnSelect(it.Key);
     }
 
     static Button MapButton(string text, Action click)
@@ -129,6 +150,9 @@ internal sealed class MapPanel : Grid
         selectedKey = key;
         map.SetSelected(key);
         detail.Text = "";
+        bool station = key != null && key.StartsWith("S:") &&
+                       !lastItems.Any(i => i.Key == key && i.Self); // not our own marker
+        openStation.Visibility = station ? Visibility.Visible : Visibility.Collapsed;
         if (key != null) engine.RequestDetail(key, d => Dispatcher.BeginInvoke(() => { if (selectedKey == key) detail.Text = d ?? ""; }));
     }
 }

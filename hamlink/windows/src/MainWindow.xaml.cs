@@ -85,6 +85,12 @@ public partial class MainWindow : Window
         });
         MessageStore.Load();
         engine.Record += r => Dispatcher.BeginInvoke(() => MessageStore.Add(r));
+        stations = new StationsPanel(settings, PlayPcm);
+        StationsHost.Child = stations;
+        stations.StationSelected += call => { if (stations.IsShown) DestBox.Text = call; };
+        stations.UnreadChanged += n => ViewStationsBtn.Content = n > 0 ? $"Stations ({n})" : "Stations";
+        stations.ShowOnMap += call => { ViewMapBtn.IsChecked = true; mapPanel?.ShowStation(call, stations.MapItems); };
+        engine.MapUpdated += items => Dispatcher.BeginInvoke(() => stations.SetMapItems(items));
         engine.PhaseChanged += (phase, level) => Dispatcher.BeginInvoke(() => ShowPhase(phase, level));
         engine.Mode += text => Dispatcher.BeginInvoke(() => ModeText.Text = text);
         engine.ManualState += (on, stage, pending) => Dispatcher.BeginInvoke(() =>
@@ -101,17 +107,34 @@ public partial class MainWindow : Window
     }
 
     MapPanel? mapPanel;
+    readonly StationsPanel stations;
 
     void OnViewChanged(object sender, RoutedEventArgs e)
     {
         if (loadingUi) return; // Checked fires while the window is still being built
         if (ViewMapBtn.IsChecked == true)
         {
-            if (mapPanel == null) { mapPanel = new MapPanel(settings, engine); MapHost.Child = mapPanel; }
+            if (mapPanel == null)
+            {
+                mapPanel = new MapPanel(settings, engine);
+                mapPanel.OpenStation += call => { ViewStationsBtn.IsChecked = true; stations.Select(call); };
+                MapHost.Child = mapPanel;
+            }
             MapHost.Visibility = Visibility.Visible;
             mapPanel.Refresh();
         }
         else MapHost.Visibility = Visibility.Collapsed;
+        stations.IsShown = ViewStationsBtn.IsChecked == true;
+        StationsHost.Visibility = stations.IsShown ? Visibility.Visible : Visibility.Collapsed;
+        LogList.Visibility = stations.IsShown ? Visibility.Hidden : Visibility.Visible;
+        if (stations.IsShown) stations.Activated();
+    }
+
+    /// <summary>Plays a decoded voice clip on the chosen voice output (Windows default if none).</summary>
+    void PlayPcm(short[] pcm)
+    {
+        try { VoicePlayer.Play(pcm, Devices.Find(Devices.Outputs(), settings.VoiceOutput, preferUsb: false) is int d && d >= 0 ? d : -1); }
+        catch (Exception ex) { AddLog(LogKind.Error, $"playback failed: {ex.Message}", -1, null); }
     }
 
     void RefreshHeader() => CallText.Text = settings.CallsignValid ? settings.Callsign : "set your callsign in Settings";

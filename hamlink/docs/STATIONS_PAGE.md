@@ -1,6 +1,8 @@
 # Stations page and monitor mode: plan
 
-Status (2026-11-04): planned, not started.
+Status (2026-11-04): **steps 1-4 done** in both apps: the message history, the Stations page, unread counts, search,
+"Show on map", and a "Messages" button on map markers. Both apps build; not yet tried on a phone or on the air. Next:
+step 5, monitor mode in the core.
 
 A third page in the Windows and Android apps, beside **Messages** and **Map**, that shows traffic one station at a time.
 With **monitor mode** on, it also shows messages between *other* stations that this station overheard.

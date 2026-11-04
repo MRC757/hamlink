@@ -178,16 +178,32 @@ JNIEXPORT jbyteArray JNICALL Java_org_hamlink_app_Native_voiceEncode(JNIEnv *env
     return arr;
 }
 
+static jshortArray decode_clip(JNIEnv *env, hl_ctx *ctx, jbyteArray clip);
+
 JNIEXPORT jshortArray JNICALL Java_org_hamlink_app_Native_voiceDecode(JNIEnv *env, jobject thiz, jbyteArray clip) {
     (void)thiz;
     if (!G.ctx) return NULL;
+    return decode_clip(env, G.ctx, clip);
+}
+
+/* Stored clips (the Stations page) are played from the UI thread, whether or not the radio runs: they get their own
+ * context, so they never touch the engine's, which only the engine thread may use. */
+JNIEXPORT jshortArray JNICALL Java_org_hamlink_app_Native_storedVoiceDecode(JNIEnv *env, jobject thiz, jbyteArray clip) {
+    (void)thiz;
+    static hl_ctx *dec;
+    if (!dec) dec = hl_create("N0CALL", 0, 1, 300, 1, NULL, NULL, NULL, NULL);
+    if (!dec) return NULL;
+    return decode_clip(env, dec, clip);
+}
+
+static jshortArray decode_clip(JNIEnv *env, hl_ctx *ctx, jbyteArray clip) {
     jsize len = (*env)->GetArrayLength(env, clip);
     jbyte *c = (*env)->GetByteArrayElements(env, clip, NULL);
     int cap = ((len / 4) + 1) * 320;
     int16_t *pcm = (int16_t *)malloc((size_t)cap * sizeof(int16_t));
     jshortArray out = NULL;
     if (pcm) {
-        int k = hl_voice_decode(G.ctx, (const uint8_t *)c, len, pcm, cap);
+        int k = hl_voice_decode(ctx, (const uint8_t *)c, len, pcm, cap);
         if (k > 0) {
             out = (*env)->NewShortArray(env, k);
             (*env)->SetShortArrayRegion(env, out, 0, k, (const jshort *)pcm);
