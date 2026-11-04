@@ -73,14 +73,23 @@ internal sealed class ReportWindow : Window
     readonly Button send = new() { Content = "Send", Padding = new Thickness(18, 5, 18, 5), IsDefault = true };
     readonly Dictionary<string, Func<string>> readers = new(); // field key -> current value as key=value text ("" = unset)
     readonly Fix? at; // location the report is seeded with (e.g. a map right-click), if any
+    // Recipient: CQ (everyone, no ACK) or one station (acknowledged). The heard stations are offered; any callsign can be typed.
+    readonly ComboBox to = new() { IsEditable = true, Width = 160, HorizontalAlignment = HorizontalAlignment.Left };
+    readonly TextBlock toNote = new() { Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     SchemaSpec schema;
 
     /// <summary>Opens the report form. If <paramref name="at"/> is given (e.g. a map right-click), latlon fields
     /// start filled with that location instead of the operator's own position.</summary>
-    public ReportWindow(Engine engine, Fix? at = null)
+    public ReportWindow(Engine engine, Fix? at = null, string dest = StationsPanel.CqEntry)
     {
         this.engine = engine;
         this.at = at;
+        to.Items.Add(StationsPanel.CqEntry);
+        foreach (var call in StationsPanel.HeardCalls) to.Items.Add(call);
+        to.Text = dest;
+        to.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent, new TextChangedEventHandler((_, _) => ShowToNote()));
+        to.SelectionChanged += (_, _) => Dispatcher.BeginInvoke(ShowToNote);
+        ShowToNote();
         schema = forms[0];
         Title = "New report";
         Width = 520;
@@ -106,10 +115,23 @@ internal sealed class ReportWindow : Window
         }
         root.Children.Add(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 560 });
         root.Children.Add(error);
-        root.Children.Add(new TextBlock { Text = "Sent to everyone in range (CQ). Callsign and time are added automatically.", Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
+        root.Children.Add(Caption("To"));
+        root.Children.Add(to);
+        root.Children.Add(toNote);
         root.Children.Add(buttons);
         Content = root;
         Build();
+    }
+
+    string Dest => to.Text.Trim().ToUpperInvariant();
+
+    void ShowToNote()
+    {
+        string d = Dest;
+        toNote.Text = d is "" or StationsPanel.CqEntry
+            ? "Everyone in range (CQ), no acknowledgement. Your callsign and the time are added automatically."
+            : $"Only {d}, who acknowledges it (delivered / FAILED as for a message). Other stations see it only with " +
+              "Monitor all traffic on. Your callsign and the time are added automatically.";
     }
 
     static Brush? BrushOf(string? hex)
@@ -216,8 +238,14 @@ internal sealed class ReportWindow : Window
             else if (v.Length > 0) kv.Append($"{f.Key}={v}\n");
             else if (f.Kind == "flags" && !f.Optional) kv.Append($"{f.Key}=none\n");
         }
+        string dest = Dest.Length == 0 ? StationsPanel.CqEntry : Dest;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(dest, "^[A-Z0-9/-]{2,8}$"))
+        {
+            error.Text = "To: CQ, or a callsign (2-8 letters, digits, / or -).";
+            return;
+        }
         send.IsEnabled = false;
-        engine.SendReport(schema.Name, kv.ToString(), "CQ", err => Dispatcher.BeginInvoke(() =>
+        engine.SendReport(schema.Name, kv.ToString(), dest, err => Dispatcher.BeginInvoke(() =>
         {
             send.IsEnabled = true;
             if (err == null) { DialogResult = true; Close(); }

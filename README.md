@@ -63,6 +63,8 @@ GPS coordinates are blurred in these screenshots.
   from USGS topo maps or your own tile server.
 * **Station SITREP:** an eight-field status report (conditions, home/mobile/portable, then power, water, sanitation,
   medical, grid communications and transportation, which may be omitted when all is OK).
+* **Reports to one station:** SALUTE and SITREP reports can go to everyone (CQ) or to one heard station, which
+  acknowledges them. Positions always go to everyone.
 * **Stations page:** messages one station at a time, with the station's SITREP colour, last heard, distance and
   direction, unread counts and a link to the map. Messages are kept for 5 days.
 * **Monitor all traffic** and **Listen on all modems** (both off by default): show messages between other stations,

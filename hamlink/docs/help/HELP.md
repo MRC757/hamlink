@@ -29,6 +29,17 @@ HamLink sends text, voice clips, positions and reports over FM radios. This help
   deletes them.
 - Android: **Back** returns from a conversation to the list.
 
+## Sending a report to one station
+
+SALUTE reports and Station SITREPs go to everyone (CQ) unless you choose otherwise. The **To** box at the bottom of
+the report form lists **CQ** and the stations you have heard, most recently heard first; you can also type a callsign.
+
+- **CQ**: everyone in range sees it, and nobody acknowledges it.
+- **A station**: only that station sees it, and it acknowledges it, so the report shows queued, delivered or FAILED
+  like a message. It is relayed like any message, and it appears in that station's conversation on the Stations page.
+  Other stations see it only if they have **Monitor all traffic** on.
+- **Send my position** always goes to everyone (CQ), as does the automatic position beacon.
+
 ## Monitor and listen on all modems
 
 Two settings, both **off** by default.

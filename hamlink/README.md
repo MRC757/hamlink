@@ -53,6 +53,8 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   Report types are data (`schemas/*.json`), so adding one is a JSON file.
   Optional automatic repeat of your broadcast reports (off by default; receivers show each report once).
   To report on a spot: right-click it on the Windows map, long-press it on Android, or use *Pick on map* in the form.
+  SALUTE and SITREP reports go to **CQ** or to **one station** (the form's *To* list offers the heard stations; a
+  report to one station is acknowledged). *Send my position* always goes to CQ.
 * **Station SITREP**: an eight-field drop-down status report about your own station and area (conditions, home/
   mobile/portable, power, water, sanitation, medical, grid communications, transportation), about 4 bytes on the air.
   See `docs/MAPS_AND_REPORTS.md` and `docs/EXTENDING.md`.

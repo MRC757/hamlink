@@ -18,6 +18,9 @@ internal sealed class StationsPanel : Grid
 {
     public const string CqEntry = "CQ";
 
+    /// <summary>Callsigns of the stations in the list, most recently heard first (the report form's "To" choices).</summary>
+    public static IReadOnlyList<string> HeardCalls { get; private set; } = Array.Empty<string>();
+
     readonly Settings settings;
     readonly Action<short[]> play;
     readonly TextBox search = new() { Padding = new Thickness(3), Margin = new Thickness(0, 0, 0, 6) };
@@ -197,6 +200,7 @@ internal sealed class StationsPanel : Grid
         {
             string q = search.Text.Trim().ToUpperInvariant();
             var rows = Rows();
+            HeardCalls = rows.Where(r => r.Call != CqEntry).Select(r => r.Call).ToList();
             UnreadChanged?.Invoke(rows.Sum(r => r.Unread));
             showHeard.Visibility = settings.Monitor ? Visibility.Visible : Visibility.Collapsed;
             list.Items.Clear();

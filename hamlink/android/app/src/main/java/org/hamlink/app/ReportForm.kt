@@ -127,6 +127,8 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
         }
     }
     var error by remember { mutableStateOf<String?>(null) }
+    // Recipient: CQ (everyone, no ACK) or one station (acknowledged). Heard stations are offered; any callsign can be typed.
+    var dest by remember { mutableStateOf(CQ_ENTRY) }
     var tried by remember(schema) { mutableStateOf(false) } // after a failed Send, missing fields are shown in red
     var sending by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<String?>(null) } // key of the position field being picked on the map
@@ -215,8 +217,13 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
                         }
                     }
                 }
+                RecipientField(dest) { dest = it }
+                val d = dest.trim()
+                Text(if (d.isEmpty() || d == CQ_ENTRY) "Everyone in range (CQ), no acknowledgement. Your callsign and the time are added automatically."
+                     else "Only $d, who acknowledges it (delivered / FAILED as for a message). Other stations see it only with " +
+                          "Monitor all traffic on. Your callsign and the time are added automatically.",
+                    style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
-                Text("Sent to everyone in range (CQ). Callsign and time are added automatically.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
@@ -236,8 +243,10 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
                     if (f.kind == "time") kv.append("${f.key}=${nowS - (v.toLongOrNull() ?: 0L) * 60}\n")
                     else if (v.isNotEmpty() || f.kind == "flags" && !f.optional) kv.append("${f.key}=${v.ifEmpty { "none" }}\n")
                 }
+                val to = dest.trim().uppercase().ifEmpty { CQ_ENTRY }
+                if (!Regex("^[A-Z0-9/-]{2,8}$").matches(to)) { error = "To: CQ, or a callsign (2-8 letters, digits, / or -)."; return@TextButton }
                 sending = true
-                eng.sendReport(schema.name, kv.toString()) { err ->
+                eng.sendReport(schema.name, kv.toString(), to) { err ->
                     sending = false
                     if (err == null) onClose() else error = err
                 }
@@ -252,6 +261,28 @@ fun ReportDialog(source: TileSource, at: Pair<Double, Double>? = null, onClose: 
             values[key] = fmt(lat, lon)
             picking = null
         })
+    }
+}
+
+/** "To": CQ or a heard station from the drop-down, most recently heard first; a callsign can also be typed. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecipientField(value: String, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val calls = remember { listOf(CQ_ENTRY) + stationRows(null).map { it.call }.filter { it != CQ_ENTRY } }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value, { onChange(it.uppercase().take(8)) }, singleLine = true,
+            label = { Text("To") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            keyboardOptions = KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters),
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            calls.forEach { c ->
+                DropdownMenuItem(text = { Text(if (c == CQ_ENTRY) "CQ (everyone)" else c) }, onClick = { onChange(c); open = false })
+            }
+        }
     }
 }
 
