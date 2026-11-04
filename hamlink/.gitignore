@@ -9,3 +9,7 @@ windows/obj/
 windows/publish/
 build-win/
 android/app/.cxx/
+# Android release signing key and its passwords: never in the repository
+*.jks
+*.keystore
+keystore.properties

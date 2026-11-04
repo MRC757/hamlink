@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -25,8 +27,26 @@ android {
         }
     }
 
+    // Release signing key: kept OUTSIDE the repository (never commit it). Default location
+    // %USERPROFILE%/.hamlink-release/keystore.properties (storeFile, storePassword, keyAlias, keyPassword), or the file
+    // named by HAMLINK_KEYSTORE_PROPS. Without it, release builds are unsigned.
+    val keyProps = File(System.getenv("HAMLINK_KEYSTORE_PROPS")
+        ?: "${System.getProperty("user.home")}/.hamlink-release/keystore.properties")
+    val releaseKey = if (keyProps.exists()) Properties().apply { keyProps.inputStream().use { load(it) } } else null
+    signingConfigs {
+        if (releaseKey != null) create("release") {
+            storeFile = file(releaseKey.getProperty("storeFile"))
+            storePassword = releaseKey.getProperty("storePassword")
+            keyAlias = releaseKey.getProperty("keyAlias")
+            keyPassword = releaseKey.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            if (releaseKey != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

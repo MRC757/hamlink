@@ -440,7 +440,7 @@ internal sealed class Engine
                             else
                             {
                                 SetStage("TRANSMITTING: keep holding the radio's PTT");
-                                Transmit(ptt, burst, outDev);
+                                Transmit(ptt, burst, outDev, manual: true);
                                 SetStage("Release the radio's PTT now");
                                 stageClearAt = Now() + 2500;
                             }
@@ -613,7 +613,7 @@ internal sealed class Engine
     }
 
     /// <summary>Key PTT, play the pre-modulated burst, wait for it to drain, unkey (always).</summary>
-    void Transmit(Ptt ptt, short[] burst, int outDev)
+    void Transmit(Ptt ptt, short[] burst, int outDev, bool manual = false)
     {
         PhaseChanged?.Invoke(Phase.Tx, 0);
         txActive = true;
@@ -639,7 +639,16 @@ internal sealed class Engine
             wo.Play();
             // With ReadFully=false the provider returns 0 bytes when drained, which ends playback and
             // raises PlaybackStopped. If that never fires, fall back to the burst duration plus a margin.
-            if (!done.Wait(TimeSpan.FromSeconds(seconds + 1.5)))
+            // Manual PTT: count down the transmission, so the operator knows when letting go is safe.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int shownLeft = -1;
+            bool finished = false;
+            while (!(finished = done.Wait(250)) && sw.Elapsed.TotalSeconds < seconds + 1.5)
+            {
+                int left = Math.Max(0, (int)Math.Ceiling(seconds - sw.Elapsed.TotalSeconds));
+                if (manual && left != shownLeft) { shownLeft = left; SetStage($"TRANSMITTING: keep holding the radio's PTT ({left} s left)"); }
+            }
+            if (!finished)
                 Log?.Invoke(LogKind.Event, "playback-complete event not seen; keyed by timer", -1, null);
             Thread.Sleep(200); // let the final flags leave the USB codec and radio before dropping PTT
         }

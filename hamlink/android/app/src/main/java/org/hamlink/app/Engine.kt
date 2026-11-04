@@ -420,7 +420,7 @@ class Engine(private val ctx: Context) : MeshListener {
                             } else {
                                 setStage("TRANSMITTING: keep holding the radio's PTT")
                                 rec.stop()
-                                transmit(p, burst)
+                                transmit(p, burst, manual = true)
                                 rec.startRecording()
                                 setStage("Release the radio's PTT now")
                                 stageClearAt = now() + 2500
@@ -453,21 +453,30 @@ class Engine(private val ctx: Context) : MeshListener {
     }
 
     /** Key PTT, play the pre-modulated burst, wait for it to drain, unkey (always). */
-    private fun transmit(p: Ptt, burst: ShortArray) {
+    private fun transmit(p: Ptt, burst: ShortArray, manual: Boolean = false) {
         Hub.ui { Hub.phase = Hub.Phase.TX }
         val track = createTrack()
+        var shownLeft = -1
+        // Manual PTT: count down the transmission, so the operator knows when letting go is safe.
+        fun countdown() {
+            if (!manual) return
+            val left = ((burst.size - track.playbackHeadPosition).coerceAtLeast(0) + fs - 1) / fs
+            if (left != shownLeft) { shownLeft = left; setStage("TRANSMITTING: keep holding the radio's PTT ($left s left)") }
+        }
         try {
             track.play()
             p.key(true)
             var off = 0
             val started = now()
+            val chunk = fs / 4 // write in quarter seconds so the countdown can update while the audio plays
             while (off < burst.size && running && now() - started < 40_000) {
-                val w = track.write(burst, off, burst.size - off)
+                val w = track.write(burst, off, minOf(chunk, burst.size - off))
                 if (w < 0) break
                 off += w
+                countdown()
             }
             val deadline = now() + 3000
-            while (track.playbackHeadPosition < burst.size && now() < deadline) Thread.sleep(10)
+            while (track.playbackHeadPosition < burst.size && now() < deadline) { countdown(); Thread.sleep(10) }
             Thread.sleep(120) // let the final flags leave the radio before dropping PTT
         } finally {
             p.key(false)

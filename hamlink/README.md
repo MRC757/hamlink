@@ -123,6 +123,7 @@ tests/           pytest: modem sweep, ARQ, relay, ID timing, voice, geodesy, rep
 python3 -m pip install -r tests/requirements.txt   # plus cmake and gcc
 cd tests && python3 -m pytest -q        # about 3 minutes
 python3 sweep.py                        # modem frame-success vs SNR table
+python3 tools/psk_sweep.py              # PSK 2400/3600 (and AFSK) messages decoded vs SNR, three channel types
 python3 tools/gen_schemas.py --check    # from the repo root: generated report tables up to date
 python3 tools/syntax_check.py           # Kotlin and C# syntax (no compiler)
 ```
@@ -140,6 +141,11 @@ A prebuilt x64 `hamlink_core.dll` is checked in at `windows/native/`; `windows/b
 **Android:** `cd android && ./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`) builds
 `app/build/outputs/apk/debug/app-debug.apk`; or open `android/` in Android Studio. Needs JDK 17 and an Android SDK with
 platform 35, build-tools 35, CMake 3.22.1 and NDK 27.0.12077973 (point `android/local.properties` at it with `sdk.dir=`).
+Release builds (`gradlew assembleRelease`) are signed with the project's release key if
+`%USERPROFILE%/.hamlink-release/keystore.properties` exists (or the file named by `HAMLINK_KEYSTORE_PROPS`), giving
+`storeFile`, `storePassword`, `keyAlias` and `keyPassword`; otherwise they are unsigned. The key never goes in the
+repository. Releases up to 0.2.2 were signed with a development (debug) key, so moving to the release key needs a
+one-time uninstall and reinstall on each phone.
 The Gradle wrapper (8.10.2) is in the repository. Plugins: AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, minSdk 26,
 targetSdk 35.
 Requires a phone with USB-C host mode (OTG).

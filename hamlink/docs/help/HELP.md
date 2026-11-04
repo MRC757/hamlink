@@ -72,7 +72,7 @@ The faster the modem, the cleaner the audio path it needs. Acoustic coupling (no
 
 - **DigiRig (Mobile or Lite) or a similar USB sound card with a serial PTT line**: works with every modem. Settings: choose its audio input and output, and PTT **Serial RTS (DigiRig)** (Android: **RTS**). On Android, plug it in with a USB-C OTG cable or adapter.
 - **USB sound card without a PTT line** (or a cable to the radio's mic and speaker jacks): set PTT to **None / radio VOX** and turn on the radio's VOX. Raise **PTT lead-in** if the start of each transmission is cut off.
-- **No interface at all**: set PTT to **Manual**. HamLink counts down and tells you when to press and release the radio's PTT. Use MT63 or OFDM if you hold the phone or PC to the radio.
+- **No interface at all**: set PTT to **Manual**. HamLink counts down and tells you when to press the radio's PTT, then counts down the transmission ("12 s left") so you know when to release it. Releasing early cuts the message off. Use MT63 or OFDM if you hold the phone or PC to the radio.
 - **Radio with a built-in KISS TNC** (BTECH UV-PRO, Vero VR-N76 and similar): choose the **Bluetooth TNC** link. The radio does the modulation and keying, so only AFSK 1200 is available.
 
 ### Two devices without radios (acoustic test)
@@ -193,6 +193,10 @@ The usual cause is something in the receive audio path changing the signal. Chec
 ### Android
 
 - Changes in Settings apply when you press **Save**; a running radio restarts with them.
+- **The volume drops on its own while transmitting through a USB-C cable**: the cable is picking up the radio's RF and
+  reporting it as volume-down presses. While the radio runs and HamLink is on screen, it ignores volume presses from
+  USB accessories (the log says so once a minute); the phone's own buttons still work. Ferrite chokes on the cable,
+  low power, and keeping the antenna away from the phone fix the cause.
 - To report a crash, send a screenshot and what you tapped; a PC with adb can also collect the log (adb logcat).
 
 ### Still stuck

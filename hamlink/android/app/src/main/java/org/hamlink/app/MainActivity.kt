@@ -65,6 +65,37 @@ import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 
 class MainActivity : ComponentActivity() {
+    /**
+     * While the radio runs, volume keys from a USB accessory are ignored. Headset-style USB-C cables (the BTECH
+     * APRS-K1 PRO, for one) can pick up the radio's own RF while it transmits and report it as a stream of volume-down
+     * presses, which turns the transmit audio down until it is muted. The phone's own side buttons keep working.
+     * Only while HamLink is on screen: Android sends key events to the app in front.
+     */
+    private val ignoredVolumeFrom = HashMap<String, Long>()
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        val volumeKey = event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ||
+            event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_MUTE
+        val dev = event.device
+        if (volumeKey && Hub.phase != Hub.Phase.OFF && dev != null && isAccessory(dev)) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                val now = System.currentTimeMillis()
+                val last = ignoredVolumeFrom[dev.name] ?: 0L
+                if (now - last > 60_000) { // one log line a minute per device, not one per press
+                    Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Ignored a volume button press from ${dev.name} (USB accessory, " +
+                        "often RF picked up by the cable while transmitting; use ferrite chokes or low power)"))
+                }
+                ignoredVolumeFrom[dev.name] = now
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** A plugged-in device (USB, or Bluetooth), not the phone's own buttons. */
+    private fun isAccessory(dev: android.view.InputDevice): Boolean =
+        if (Build.VERSION.SDK_INT >= 29) dev.isExternal else dev.vendorId != 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Hub.theme = Settings(this).theme
