@@ -23,6 +23,8 @@ internal sealed class Radio : IDisposable
     public event Action<string, string, int, byte[]>? Message;   // src, dst, type, data
     public event Action<int, int>? Status;                       // msgId, status
     public event Action<string>? Event;                          // log line
+    public event Action<string, string, int, int, byte[]>? Monitor; // overheard: src, dst, type, msgId, data
+    readonly NativeMethods.MonitorCb onMonitor;
 
     public Radio(string callsign, bool relay, int ttl, int preambleMs)
     {
@@ -38,11 +40,26 @@ internal sealed class Radio : IDisposable
         };
         onStatus = (_, id, st) => Status?.Invoke(id, st);
         onEvent = (_, text) => Event?.Invoke(text);
+        onMonitor = (_, src, dst, type, id, p, n) =>
+        {
+            var data = new byte[Math.Max(n, 0)];
+            if (n > 0) Marshal.Copy(p, data, 0, n);
+            Monitor?.Invoke(src, dst, type, id, data);
+        };
 
         uint seed = (uint)(Environment.TickCount64 ^ callsign.GetHashCode());
         ctx = NativeMethods.hl_create(callsign, relay ? 1 : 0, ttl, preambleMs, seed, onMsg, onStatus, onEvent, IntPtr.Zero);
         if (ctx == IntPtr.Zero) throw new InvalidOperationException("hl_create failed");
+        NativeMethods.hl_set_monitor_callback(ctx, onMonitor, IntPtr.Zero);
     }
+
+    /// <summary>Monitor mode: report messages between other stations through <see cref="Monitor"/> (never acknowledged).</summary>
+    public void SetMonitor(bool on) => NativeMethods.hl_set_monitor(ctx, on ? 1 : 0);
+    /// <summary>Run every modem's receiver, whatever modem is selected for sending.</summary>
+    public void SetListenAll(bool on) => NativeMethods.hl_set_listen_all(ctx, on ? 1 : 0);
+    /// <summary>Inside a Message or Monitor handler: the modem that decoded the frame (-1 elsewhere).</summary>
+    public int RxModem => NativeMethods.hl_rx_modem(ctx);
+    public const int TypeAck = 3, TypeId = 4;
 
     public void SetRelay(bool on) => NativeMethods.hl_set_relay(ctx, on ? 1 : 0);
 

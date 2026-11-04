@@ -49,7 +49,7 @@ button.act.sec { background:none; color:var(--acc); }
 
 <div id="app" class="hidden">
 <nav id="tabs">
-  <button data-t="status" class="on">Status</button><button data-t="messages">Messages</button><button data-t="log">Log</button>
+  <button data-t="status" class="on">Status</button><button data-t="messages">Messages</button><button data-t="traffic">Traffic</button><button data-t="log">Log</button>
   <button data-t="settings">Settings</button><button data-t="test">Test</button><button data-t="bluetooth">Bluetooth</button>
   <button data-t="help">Help</button>
 </nav>
@@ -68,6 +68,11 @@ button.act.sec { background:none; color:var(--acc); }
     <button class="act" id="send">Send</button> <span id="send-res"></span>
   </div>
   <div class="card"><h3>Received</h3><div id="msgs"><p class="help">Nothing yet.</p></div></div>
+</section>
+
+<section id="t-traffic">
+  <div class="card"><p class="help" id="traffic-note">Messages between other stations that this relay heard. Turn on
+    <b>Monitor all traffic</b> in Settings to fill this list.</p><div id="traffic"></div></div>
 </section>
 
 <section id="t-log"><div class="card"><div id="log"></div></div></section>
@@ -172,6 +177,7 @@ async function refresh() {
     showStatus(st);
     if (tab === "log") await pollLog();
     if (tab === "messages") await loadMessages();
+    if (tab === "traffic") await loadTraffic();
   } catch (e) { /* shown by the badge */ }
 }
 function showStatus(st) {
@@ -215,6 +221,17 @@ async function pollLog() {
   }
   while (box.childElementCount > 500) box.firstChild.remove();
   if (atEnd) box.scrollTop = box.scrollHeight;
+}
+async function loadTraffic() {
+  const j = await api("/api/traffic");
+  const list = (j.traffic || []).slice().reverse();
+  if (!list.length) return;
+  $("traffic").replaceChildren(...list.map(m => {
+    const d = el("div", undefined, "msg");
+    d.append(el("small", new Date(m.t * 1000).toLocaleString() + "  " + m.src + " → " + m.dst +
+      (m.via ? "  · via " + m.via : "") + (m.status ? "  [" + m.status + "]" : "")), el("div", m.text));
+    return d;
+  }));
 }
 async function loadMessages() {
   const j = await api("/api/messages");

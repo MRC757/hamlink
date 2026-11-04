@@ -35,6 +35,9 @@ def dispatch(svc, req):
     if cmd == "messages":
         st = svc.station
         return {"ok": True, "messages": list(st.messages) if st else []}
+    if cmd == "traffic":
+        st = svc.station
+        return {"ok": True, "traffic": list(st.traffic) if st else []}
     if cmd == "send":
         to = (req.get("to") or "CQ").strip().upper()
         text, ack = req.get("text", ""), bool(req.get("ack", True))

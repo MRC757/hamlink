@@ -16,6 +16,8 @@ class Settings:
     modem: str = "afsk"            # afsk, ofdm, mt63, psk2400, psk3600 (audio link); a TNC radio always does AFSK
     afsk_fec: int = 16             # FX.25 check bytes: 0, 16, 32, 64
     relay: bool = True             # this is a relay
+    monitor: bool = False          # also show messages between other stations (Traffic list); off by default
+    listen_all: bool = False       # run every modem's receiver, whatever modem is selected; off by default
     ttl: int = 1                   # relay hops for messages this station originates
     preamble_ms: int = 500         # lead-in after keying (covers the radio's PTT-to-RF delay)
     tx_level: float = 0.3          # transmit amplitude 0..1 (calibrate with --test-tone and the other station's meter)
@@ -75,6 +77,9 @@ FORM = [
     ("modem", "Modem", ["afsk", "ofdm", "mt63", "psk2400", "psk3600"],
      "Audio link only. Every station on the channel must use the same modem."),
     ("relay", "Relay", None, "Re-send messages for stations that cannot hear each other."),
+    ("monitor", "Monitor all traffic", None, "Show messages between other stations on the Traffic tab. Never acknowledged."),
+    ("listen_all", "Listen on all modems", None,
+     "Hear stations on any modem and relay each message on the modem it arrived on. Replies go out on the selected modem."),
     ("ttl", "Max relay hops", None, "For messages this station originates."),
     ("audio_in", "Audio input", None, "Part of the device name; blank for the default."),
     ("audio_out", "Audio output", None, "Part of the device name; blank for the default."),

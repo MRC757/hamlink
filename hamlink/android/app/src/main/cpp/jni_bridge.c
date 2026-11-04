@@ -11,7 +11,7 @@
 
 static struct {
     jobject listener;
-    jmethodID m_msg, m_status, m_event;
+    jmethodID m_msg, m_status, m_event, m_monitor;
     hl_ctx *ctx;
     JNIEnv *env; /* valid only inside a native call */
 } G;
@@ -25,6 +25,21 @@ static void HL_CALL cb_message(void *u, const char *src, const char *dst, int ty
     jbyteArray arr = (*env)->NewByteArray(env, len);
     (*env)->SetByteArrayRegion(env, arr, 0, len, (const jbyte *)data);
     (*env)->CallVoidMethod(env, G.listener, G.m_msg, s, d, (jint)type, arr);
+    (*env)->DeleteLocalRef(env, s);
+    (*env)->DeleteLocalRef(env, d);
+    (*env)->DeleteLocalRef(env, arr);
+}
+
+static void HL_CALL cb_monitor(void *u, const char *src, const char *dst, int type, int msg_id, const uint8_t *data,
+                               int len) {
+    (void)u;
+    JNIEnv *env = G.env;
+    if (!env || !G.listener) return;
+    jstring s = (*env)->NewStringUTF(env, src);
+    jstring d = (*env)->NewStringUTF(env, dst);
+    jbyteArray arr = (*env)->NewByteArray(env, len);
+    (*env)->SetByteArrayRegion(env, arr, 0, len, (const jbyte *)data);
+    (*env)->CallVoidMethod(env, G.listener, G.m_monitor, s, d, (jint)type, (jint)msg_id, arr);
     (*env)->DeleteLocalRef(env, s);
     (*env)->DeleteLocalRef(env, d);
     (*env)->DeleteLocalRef(env, arr);
@@ -56,7 +71,9 @@ JNIEXPORT void JNICALL Java_org_hamlink_app_Native_start(JNIEnv *env, jobject th
     G.m_msg = (*env)->GetMethodID(env, cls, "onMessage", "(Ljava/lang/String;Ljava/lang/String;I[B)V");
     G.m_status = (*env)->GetMethodID(env, cls, "onStatus", "(II)V");
     G.m_event = (*env)->GetMethodID(env, cls, "onEvent", "(Ljava/lang/String;)V");
+    G.m_monitor = (*env)->GetMethodID(env, cls, "onMonitor", "(Ljava/lang/String;Ljava/lang/String;II[B)V");
     G.ctx = hl_create(cs, relay ? 1 : 0, ttl, preamble_ms, (uint32_t)seed, cb_message, cb_status, cb_event, NULL);
+    if (G.ctx) hl_set_monitor_callback(G.ctx, cb_monitor, NULL);
     (*env)->ReleaseStringUTFChars(env, callsign, cs);
 }
 
@@ -66,6 +83,21 @@ JNIEXPORT void JNICALL Java_org_hamlink_app_Native_stop(JNIEnv *env, jobject thi
     G.ctx = NULL;
     if (G.listener) (*env)->DeleteGlobalRef(env, G.listener);
     G.listener = NULL;
+}
+
+JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setMonitor(JNIEnv *env, jobject thiz, jboolean on) {
+    (void)env; (void)thiz;
+    if (G.ctx) hl_set_monitor(G.ctx, on ? 1 : 0);
+}
+
+JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setListenAll(JNIEnv *env, jobject thiz, jboolean on) {
+    (void)env; (void)thiz;
+    if (G.ctx) hl_set_listen_all(G.ctx, on ? 1 : 0);
+}
+
+JNIEXPORT jint JNICALL Java_org_hamlink_app_Native_rxModem(JNIEnv *env, jobject thiz) {
+    (void)env; (void)thiz;
+    return G.ctx ? hl_rx_modem(G.ctx) : -1;
 }
 
 JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setRelay(JNIEnv *env, jobject thiz, jboolean on) {

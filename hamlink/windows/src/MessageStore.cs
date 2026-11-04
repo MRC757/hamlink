@@ -23,7 +23,8 @@ public sealed class MsgRecord : INotifyPropertyChanged
     public string Kind { get; init; } = "text";  // text | voice | report
     public string Text { get; init; } = "";      // the text, the report summary, or a voice clip description
     public string? Clip { get; init; }           // voice: the Codec2 clip, base64 (decoded when played)
-    public int Id { get; init; } = -1;           // message ID of a sent message (16-bit, reused over time)
+    public int Id { get; init; } = -1;           // message ID of a sent or overheard message (16-bit, reused over time)
+    public string? Via { get; init; }            // received on a modem other than the selected one ("PSK 2400"...)
     string? status;
 
     public string? Status
@@ -34,6 +35,15 @@ public sealed class MsgRecord : INotifyPropertyChanged
 
     /// <summary>The other party, the station this message is listed under. Messages we sent to CQ list under "CQ".</summary>
     [JsonIgnore] public string Station => Dir == MsgDir.Out ? To : From;
+
+    /// <summary>The station(s) it is listed under: the other party, both callsigns for overheard traffic, only the
+    /// sender for a station ID.</summary>
+    [JsonIgnore] public string[] Parties => Dir switch
+    {
+        MsgDir.Out => new[] { To },
+        MsgDir.Heard when Kind != "id" && To != "CQ" => new[] { From, To },
+        _ => new[] { From },
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }
@@ -52,7 +62,13 @@ public static class MessageStore
     public static string FilePath { get; } = Path.Combine(Dir, "messages.jsonl");
     static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
-    sealed class StatusLine { public string S { get; set; } = ""; public int Id { get; set; } public long T { get; set; } }
+    sealed class StatusLine
+    {
+        public string S { get; set; } = "";
+        public int Id { get; set; }
+        public long T { get; set; }
+        public string? From { get; set; } // overheard messages: the sender (their IDs are the sender's, not ours)
+    }
 
     /// <summary>Reads the history, drops what has expired, and rewrites the file compactly. Never throws.</summary>
     public static void Load()
@@ -72,7 +88,8 @@ public static class MessageStore
                     if (doc.RootElement.TryGetProperty("S", out _))
                     {
                         var st = doc.RootElement.Deserialize<StatusLine>(Json);
-                        if (st != null && Latest(list, st.Id) is { } target) target.Status = st.S;
+                        if (st != null && (st.From == null ? Latest(list, st.Id) : LatestHeard(list, st.From, st.Id)) is { } target)
+                            target.Status = st.S;
                     }
                     else
                     {
@@ -102,6 +119,23 @@ public static class MessageStore
         if (r == null || r.Status == status) return;
         r.Status = status;
         Append(JsonSerializer.Serialize(new StatusLine { S = status, Id = id, T = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }, Json));
+    }
+
+    /// <summary>Monitor mode: the recipient acknowledged an overheard message (sender's callsign and message ID).</summary>
+    public static void SetHeardStatus(string from, int id, string status)
+    {
+        var r = LatestHeard(All, from, id);
+        if (r == null || r.Status == status) return;
+        r.Status = status;
+        Append(JsonSerializer.Serialize(new StatusLine { S = status, Id = id, From = from, T = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }, Json));
+    }
+
+    static MsgRecord? LatestHeard(IList<MsgRecord> list, string from, int id)
+    {
+        for (int i = list.Count - 1; i >= 0; i--)
+            if (list[i].Dir == MsgDir.Heard && list[i].Id == id && string.Equals(list[i].From, from, StringComparison.OrdinalIgnoreCase))
+                return list[i];
+        return null;
     }
 
     /// <summary>Deletes the whole history (Settings, "Clear message history").</summary>

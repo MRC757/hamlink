@@ -19,6 +19,23 @@ internal static class NativeMethods
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void EventCb(IntPtr user, [MarshalAs(UnmanagedType.LPStr)] string text);
 
+    // ---- monitor mode and listening on all modems (API v11) ----
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void MonitorCb(IntPtr user, [MarshalAs(UnmanagedType.LPStr)] string src,
+        [MarshalAs(UnmanagedType.LPStr)] string dst, int type, int msgId, IntPtr data, int len);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void hl_set_monitor(IntPtr ctx, int on);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void hl_set_monitor_callback(IntPtr ctx, MonitorCb cb, IntPtr user);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void hl_set_listen_all(IntPtr ctx, int on);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int hl_rx_modem(IntPtr ctx);
+
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern int hl_api_version();
 

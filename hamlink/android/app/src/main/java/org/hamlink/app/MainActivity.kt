@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
         Hub.theme = Settings(this).theme
         MessageStore.load(this)
         StationsRead.load(this)
+        Hub.monitor = Settings(this).monitor
         setContent {
             val dark = when (Hub.theme) { THEME_DARK -> true; THEME_LIGHT -> false; else -> isSystemInDarkTheme() }
             // the app draws behind the status and navigation bars: their icons must contrast with our background
@@ -259,12 +260,13 @@ private fun App() {
                     Hub.Kind.TX_TEXT, Hub.Kind.TX_VOICE -> "→ "
                     Hub.Kind.RX_TEXT, Hub.Kind.RX_VOICE -> "← "
                     Hub.Kind.EVENT -> "· "
+                    Hub.Kind.HEARD -> "≈ "
                     Hub.Kind.ERROR -> "! "
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Text(prefix + item.text + (status?.let { "  [$it]" } ?: ""),
                         color = if (item.kind == Hub.Kind.ERROR || status?.startsWith("FAILED") == true) MaterialTheme.colorScheme.error
-                        else if (item.kind == Hub.Kind.EVENT) Color.Gray else Color.Unspecified,
+                        else if (item.kind == Hub.Kind.EVENT || item.kind == Hub.Kind.HEARD) Color.Gray else Color.Unspecified,
                         modifier = Modifier.weight(1f))
                     item.clip?.let { pcm -> TextButton(onClick = { VoicePlayer.play(ctx, pcm) }) { Text("Play") } }
                 }
@@ -334,6 +336,8 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
     var line by remember { mutableStateOf(s.pttLine) }
     var usb by remember { mutableStateOf(s.useUsbAudio) }
     var auto by remember { mutableStateOf(s.autoPlayVoice) }
+    var monitorOn by remember { mutableStateOf(s.monitor) }
+    var listenAllOn by remember { mutableStateOf(s.listenAll) }
     var manualSecs by remember { mutableStateOf(s.manualCountdown.toFloat()) }
     var sense by remember { mutableStateOf(s.carrierSenseMode) }
     var repair by remember { mutableStateOf(s.bitRepair) }
@@ -449,6 +453,10 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                     Row(verticalAlignment = Alignment.CenterVertically) { Switch(repair, { repair = it }); Box(Modifier.width(8.dp)); Text("Repair single-bit errors in received frames") }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }); Box(Modifier.width(8.dp)); Text("Auto-play received voice") }
+                Row(verticalAlignment = Alignment.CenterVertically) { Switch(monitorOn, { monitorOn = it }); Box(Modifier.width(8.dp)); Text("Monitor all traffic (show messages between other stations)") }
+                Row(verticalAlignment = Alignment.CenterVertically) { Switch(listenAllOn, { listenAllOn = it }); Box(Modifier.width(8.dp)); Text("Listen on all modems") }
+                if (listenAllOn) Text("Hears stations on any modem. Replies and acknowledgements still go out on yours, so a station on " +
+                    "another modem will not hear them unless it listens on all modems too.", style = MaterialTheme.typography.bodySmall)
                 var confirmClear by remember { mutableStateOf(false) }
                 OutlinedButton(onClick = { confirmClear = true }) { Text("Clear message history") }
                 Text("Messages are kept for ${MessageStore.RETENTION_DAYS} days.", style = MaterialTheme.typography.bodySmall)
@@ -466,6 +474,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
             TextButton(onClick = {
                 s.callsign = call; s.ttl = ttl.toInt(); s.preambleMs = pre.toInt(); s.txLevel = tx
                 s.busyThreshold = busy; s.pttLine = line; s.useUsbAudio = usb; s.autoPlayVoice = auto
+                s.monitor = monitorOn; s.listenAll = listenAllOn; Hub.monitor = monitorOn
                 s.manualCountdown = manualSecs.toInt(); s.carrierSenseMode = sense; s.bitRepair = repair
                 s.transport = transport; s.modem = modem; s.afskFec = fec; s.tncBaud = tncBaud; s.btAddress = btAddress; s.btName = btName
                 if (s.callsignValid()) onDone()

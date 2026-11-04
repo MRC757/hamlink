@@ -245,3 +245,30 @@ def test_real_time_service_with_tcp_control(lib, tmp_path):
         th.join(5)
         srv.shutdown()
     assert not th.is_alive()
+
+
+def test_monitor_fills_the_traffic_list_with_delivery(lib):
+    air = audio.Air()
+    a = make(lib, air, "N0AAA", 11, relay=False)
+    b = make(lib, air, "N0BBB", 33, relay=False)
+    m = make(lib, air, "N0MON", 22, relay=False, monitor=True)
+    for x, y in (("N0AAA", "N0BBB"), ("N0AAA", "N0MON"), ("N0BBB", "N0MON")):
+        air.link(x, y)
+    msg_id = a.send_text("N0BBB", "overheard on the hill", True, air.t_ms)
+    assert run(air, [a, b, m], 40, until=lambda: delivered(a, msg_id))
+    run(air, [a, b, m], 3)
+    assert [(e["src"], e["dst"], e["text"]) for e in m.traffic] == [("N0AAA", "N0BBB", "overheard on the hill")]
+    assert m.traffic[0]["status"] == "delivered (ACK from N0BBB)"
+    assert m.ptt.keys == 0 and not m.messages          # listened only
+
+
+def test_listen_all_relay_passes_another_modem_on_that_modem(lib):
+    air = audio.Air()
+    a = make(lib, air, "N0AAA", 11, relay=False, modem="psk2400")
+    b = make(lib, air, "N0BBB", 33, relay=False, modem="psk2400")
+    r = make(lib, air, "N0RLY", 22, relay=True, modem="mt63", listen_all=True)
+    air.link("N0AAA", "N0RLY")
+    air.link("N0RLY", "N0BBB")
+    msg_id = a.send_text("N0BBB", "PSK through an MT63 relay", True, air.t_ms)
+    assert run(air, [a, r, b], 60, until=lambda: delivered(a, msg_id)), "\n".join(r.lines)
+    assert [m["text"] for m in b.messages] == ["PSK through an MT63 relay"]

@@ -47,6 +47,14 @@ class Settings(ctx: Context) {
     var autoPlayVoice: Boolean
         get() = sp.getBoolean("autoPlayVoice", true)
         set(v) = sp.edit().putBoolean("autoPlayVoice", v).apply()
+    /** Monitor mode: also show messages between other stations (off by default). */
+    var monitor: Boolean
+        get() = sp.getBoolean("monitor", false)
+        set(v) = sp.edit().putBoolean("monitor", v).apply()
+    /** Run every modem's receiver, whatever modem is selected (off by default). */
+    var listenAll: Boolean
+        get() = sp.getBoolean("listenAll", false)
+        set(v) = sp.edit().putBoolean("listenAll", v).apply()
     var dest: String
         get() = sp.getString("dest", "CQ") ?: "CQ"
         set(v) = sp.edit().putString("dest", v.trim().uppercase()).apply()

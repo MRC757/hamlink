@@ -21,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,12 +69,20 @@ object StationsRead {
     }
 }
 
-/** The station(s) a message is listed under: the other party, or both callsigns for overheard traffic. */
-fun MsgRecord.parties(): List<String> = when (dir) {
-    MsgDir.OUT -> listOf(to)
-    MsgDir.HEARD -> listOf(from, to)
-    MsgDir.IN -> listOf(from)
+/** The station(s) a message is listed under: the other party, both callsigns for overheard traffic, only the sender
+ *  for a station ID. */
+fun MsgRecord.parties(): List<String> = when {
+    dir == MsgDir.OUT -> listOf(to)
+    dir == MsgDir.HEARD && kind != "id" && to != CQ_ENTRY -> listOf(from, to)
+    else -> listOf(from)
 }
+
+/** "Show overheard" on the Stations page. */
+object StationsView { var showHeard by mutableStateOf(true) }
+
+/** Overheard traffic is shown while monitor mode is on and "Show overheard" is ticked; station IDs always count for
+ *  "last heard". */
+fun MsgRecord.shown() = dir != MsgDir.HEARD || kind == "id" || (Hub.monitor && StationsView.showHeard)
 
 data class StationRow(val call: String, val lastT: Long, val unread: Int, val detail: String, val color: Color)
 
@@ -81,11 +90,11 @@ data class StationRow(val call: String, val lastT: Long, val unread: Int, val de
 fun stationRows(open: String?): List<StationRow> {
     data class Acc(var last: Long = 0, var unread: Int = 0)
     val acc = HashMap<String, Acc>()
-    for (m in MessageStore.all) for (call in m.parties()) {
+    for (m in MessageStore.all) if (m.shown()) for (call in m.parties()) {
         val a = acc.getOrPut(call) { Acc() }
         a.last = maxOf(a.last, m.t)
         val read = StationsRead.lastRead[call] ?: 0L
-        if (m.dir != MsgDir.OUT && m.t > read && call != open) a.unread++
+        if (m.dir == MsgDir.IN && m.t > read && call != open) a.unread++
     }
     val now = System.currentTimeMillis()
     val stations = Hub.mapItems.filter { it.type == 'S' && !it.self }.associateBy { it.name.uppercase() }
@@ -146,11 +155,15 @@ private fun bearingDeg(lat1: Double, lon1: Double, lat2: Double, lon2: Double): 
 fun StationList(modifier: Modifier, onOpen: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     // read the store and map so Compose recomposes when either changes
-    val rows = stationRows(null).let { MessageStore.all.size; Hub.mapItems; StationsRead.lastRead.size; it }
+    val rows = stationRows(null).let { MessageStore.all.size; Hub.mapItems; StationsRead.lastRead.size; StationsView.showHeard; it }
         .filter { query.isBlank() || it.call == CQ_ENTRY || it.call.contains(query.trim().uppercase()) }
     Column(modifier) {
         OutlinedTextField(query, { query = it.uppercase().take(8) }, label = { Text("Find a callsign") }, singleLine = true,
             modifier = Modifier.fillMaxWidth())
+        if (Hub.monitor) Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(StationsView.showHeard, { StationsView.showHeard = it })
+            Text("  Show overheard (messages between other stations)", style = MaterialTheme.typography.bodySmall)
+        }
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(rows, key = { it.call }) { r ->
                 Row(Modifier.fillMaxWidth().clickable { onOpen(r.call) }.padding(vertical = 10.dp),
@@ -174,7 +187,7 @@ fun StationList(modifier: Modifier, onOpen: (String) -> Unit) {
 @Composable
 fun StationConversation(call: String, modifier: Modifier, onBack: () -> Unit, onShowOnMap: (() -> Unit)?) {
     val ctx = LocalContext.current
-    val msgs = MessageStore.all.filter { m -> m.parties().any { it.equals(call, ignoreCase = true) } }
+    val msgs = MessageStore.all.filter { m -> m.kind != "id" && m.shown() && m.parties().any { it.equals(call, ignoreCase = true) } }
     val listState = rememberLazyListState()
     LaunchedEffect(call, msgs.size) {
         StationsRead.mark(ctx, call)
@@ -219,7 +232,8 @@ private fun Bubble(m: MsgRecord, time: String, ctx: Context) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(Modifier.widthIn(max = 300.dp).background(bg, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp)) {
             val status = m.status
-            Text("$time  $who" + (if (mine && status != null) "  [$status]" else ""), style = MaterialTheme.typography.bodySmall,
+            Text("$time  $who" + (m.via?.let { "  · via $it" } ?: "") + (if (m.dir != MsgDir.IN && status != null) "  [$status]" else ""),
+                style = MaterialTheme.typography.bodySmall,
                 color = if (status?.startsWith("FAILED") == true) MaterialTheme.colorScheme.error else Color.Gray)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (m.kind == "report") "[report] ${m.text}" else m.text, modifier = Modifier.weight(1f, fill = false),

@@ -12,7 +12,9 @@ import androidx.compose.runtime.setValue
 /** UI-visible state. Written from the engine thread via [ui], read by Compose. */
 object Hub {
     enum class Phase { OFF, IDLE, BUSY, TX }
-    enum class Kind { RX_TEXT, TX_TEXT, RX_VOICE, TX_VOICE, EVENT, ERROR }
+    enum class Kind { RX_TEXT, TX_TEXT, RX_VOICE, TX_VOICE, EVENT, ERROR, HEARD }
+    /** Mirrors Settings.monitor, so the Stations page shows its "Show overheard" switch at once. */
+    var monitor by mutableStateOf(false)
 
     class LogItem(
         val kind: Kind,

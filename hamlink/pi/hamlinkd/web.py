@@ -155,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, control.dispatch(w.svc, {"cmd": "log", "since": q.get("since", ["0"])[0]}))
             if u.path == "/api/messages":
                 return self._send(200, control.dispatch(w.svc, {"cmd": "messages"}))
+            if u.path == "/api/traffic":
+                return self._send(200, control.dispatch(w.svc, {"cmd": "traffic"}))
             if u.path == "/api/settings":
                 cfg = w.svc.settings()
                 return self._send(200, {"ok": True, "values": {n: getattr(cfg, n) for n, *_ in S.FORM},

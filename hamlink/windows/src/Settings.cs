@@ -28,6 +28,10 @@ internal sealed class Settings
     public string VoiceInput { get; set; } = "";
     public string VoiceOutput { get; set; } = "";
     public bool AutoPlayVoice { get; set; } = true;
+    /// <summary>Monitor mode: also show messages between other stations (off by default).</summary>
+    public bool Monitor { get; set; }
+    /// <summary>Run every modem's receiver, whatever modem is selected (off by default).</summary>
+    public bool ListenAll { get; set; }
     /// <summary>Seconds between pressing Transmit and the audio starting, in MANUAL PTT mode.</summary>
     public int ManualCountdown { get; set; } = 3;
     /// <summary>Hold off transmitting while the receive audio is loud. Turn off for acoustic tests where room noise keeps it busy.</summary>

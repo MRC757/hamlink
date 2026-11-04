@@ -38,6 +38,17 @@ internal sealed class SettingsWindow : Window
     readonly Slider tx = new() { Minimum = 0.02, Maximum = 1.0 };
     readonly Slider busy = new() { Minimum = 0.0005, Maximum = 0.05 };
     readonly CheckBox auto = new() { Content = "Auto-play received voice clips" };
+    readonly CheckBox monitor = new()
+    {
+        Content = "Monitor all traffic (show messages between other stations)", Margin = new Thickness(0, 6, 0, 0),
+        ToolTip = "Overheard messages are shown in grey and never acknowledged. Relaying is not affected.",
+    };
+    readonly CheckBox listenAll = new()
+    {
+        Content = "Listen on all modems (hear stations on any modem; replies still go out on yours)", Margin = new Thickness(0, 6, 0, 0),
+        ToolTip = "Runs every modem's receiver. A station on another modem will not hear your replies or acknowledgements " +
+                  "unless it listens on all modems too.",
+    };
     static readonly string[] SenseChoices =
     {
         "Off: never wait (tests only; you may transmit over other stations)",
@@ -106,6 +117,8 @@ internal sealed class SettingsWindow : Window
         call.Text = s.Callsign;
         ttl.Value = s.Ttl; pre.Value = s.PreambleMs; tx.Value = s.TxLevel; busy.Value = s.BusyThreshold;
         auto.IsChecked = s.AutoPlayVoice;
+        monitor.IsChecked = s.Monitor;
+        listenAll.IsChecked = s.ListenAll;
         ttl.ValueChanged += (_, _) => UpdateLabels();
         pre.ValueChanged += (_, _) => UpdateLabels();
         tx.ValueChanged += (_, _) => UpdateLabels();
@@ -154,6 +167,8 @@ internal sealed class SettingsWindow : Window
 
         Row(panel, ttlLabel, ttl);
         panel.Children.Add(auto);
+        panel.Children.Add(monitor);
+        panel.Children.Add(listenAll);
         var clearHistory = new Button
         {
             Content = "Clear message history", Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 10, 0, 0),
@@ -283,6 +298,8 @@ internal sealed class SettingsWindow : Window
         s.TxLevel = (float)tx.Value;
         s.BusyThreshold = (float)busy.Value;
         s.AutoPlayVoice = auto.IsChecked == true;
+        s.Monitor = monitor.IsChecked == true;
+        s.ListenAll = listenAll.IsChecked == true;
         DialogResult = true;
     }
 }

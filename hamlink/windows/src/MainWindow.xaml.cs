@@ -37,6 +37,7 @@ public sealed class LogItem : INotifyPropertyChanged
                 LogKind.TxText or LogKind.TxVoice => "→ ",
                 LogKind.RxText or LogKind.RxVoice => "← ",
                 LogKind.Event => "· ",
+                LogKind.Heard => "≈ ",
                 _ => "! ",
             };
             return prefix + Text + (string.IsNullOrEmpty(status) ? "" : $"   [{status}]");
@@ -45,7 +46,7 @@ public sealed class LogItem : INotifyPropertyChanged
 
     public Brush Brush =>
         Kind == LogKind.Error || (status?.StartsWith("FAILED") ?? false) ? Brushes.Firebrick
-        : Kind == LogKind.Event ? Brushes.Gray
+        : Kind == LogKind.Event || Kind == LogKind.Heard ? Brushes.Gray
         : Brushes.Black;
 
     public Visibility PlayVisibility => Clip != null ? Visibility.Visible : Visibility.Collapsed;
@@ -85,6 +86,7 @@ public partial class MainWindow : Window
         });
         MessageStore.Load();
         engine.Record += r => Dispatcher.BeginInvoke(() => MessageStore.Add(r));
+        engine.Heard += (from, id, by) => Dispatcher.BeginInvoke(() => MessageStore.SetHeardStatus(from, id, $"delivered (ACK from {by})"));
         stations = new StationsPanel(settings, PlayPcm);
         StationsHost.Child = stations;
         stations.StationSelected += call => { if (stations.IsShown) DestBox.Text = call; };

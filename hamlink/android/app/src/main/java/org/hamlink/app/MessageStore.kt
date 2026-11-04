@@ -27,8 +27,9 @@ class MsgRecord(
     val kind: String,            // text | voice | report
     val text: String,            // the text, the report summary, or a voice clip description
     val clip: ByteArray? = null, // voice: the Codec2 clip (decoded when played)
-    val id: Int = -1,            // message ID of a sent message (16-bit, reused over time)
+    val id: Int = -1,            // message ID of a sent or overheard message (16-bit, reused over time)
     status: String? = null,
+    val via: String? = null,     // received on a modem other than the selected one ("PSK 2400"...)
 ) {
     var status by mutableStateOf(status)
 
@@ -41,6 +42,7 @@ class MsgRecord(
         if (clip != null) put("Clip", Base64.encodeToString(clip, Base64.NO_WRAP))
         put("Id", id)
         status?.let { put("Status", it) }
+        via?.let { put("Via", it) }
     }.toString()
 
     companion object {
@@ -50,6 +52,7 @@ class MsgRecord(
             text = o.optString("Text"),
             clip = if (o.has("Clip")) Base64.decode(o.getString("Clip"), Base64.NO_WRAP) else null,
             id = o.optInt("Id", -1), status = if (o.has("Status")) o.getString("Status") else null,
+            via = if (o.has("Via")) o.getString("Via") else null,
         )
     }
 }
@@ -80,7 +83,8 @@ object MessageStore {
                 if (line.isBlank()) return@forEachLine
                 try {
                     val o = JSONObject(line)
-                    if (o.has("S")) latest(list, o.getInt("Id"))?.status = o.getString("S")
+                    if (o.has("S")) (if (o.has("From")) latestHeard(list, o.getString("From"), o.getInt("Id"))
+                                     else latest(list, o.getInt("Id")))?.status = o.getString("S")
                     else MsgRecord.fromJson(o).let { if (it.t >= cutoff) list.add(it) }
                 } catch (_: JSONException) { /* one damaged line (power cut while writing) never loses the rest */ }
                 catch (_: IllegalArgumentException) { }
@@ -102,6 +106,20 @@ object MessageStore {
         if (r.status == status) return
         r.status = status
         append(JSONObject().apply { put("S", status); put("Id", id); put("T", System.currentTimeMillis()) }.toString())
+    }
+
+    /** Monitor mode: the recipient acknowledged an overheard message (sender's callsign and message ID). */
+    fun setHeardStatus(from: String, id: Int, status: String) {
+        val r = latestHeard(all, from, id) ?: return
+        if (r.status == status) return
+        r.status = status
+        append(JSONObject().apply { put("S", status); put("Id", id); put("From", from); put("T", System.currentTimeMillis()) }.toString())
+    }
+
+    private fun latestHeard(list: List<MsgRecord>, from: String, id: Int): MsgRecord? {
+        for (i in list.indices.reversed())
+            if (list[i].dir == MsgDir.HEARD && list[i].id == id && list[i].from.equals(from, ignoreCase = true)) return list[i]
+        return null
     }
 
     /** Deletes the whole history (Settings, "Clear message history"). */

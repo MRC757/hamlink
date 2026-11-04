@@ -21,6 +21,11 @@ internal sealed class StationsPanel : Grid
     readonly Settings settings;
     readonly Action<short[]> play;
     readonly TextBox search = new() { Padding = new Thickness(3), Margin = new Thickness(0, 0, 0, 6) };
+    readonly CheckBox showHeard = new()
+    {
+        Content = "Show overheard", IsChecked = true, Margin = new Thickness(0, 0, 0, 6),
+        ToolTip = "Monitor mode: messages between other stations",
+    };
     readonly ListBox list = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
     readonly TextBlock title = new() { FontSize = 18, FontWeight = FontWeights.SemiBold };
     readonly TextBlock subtitle = new() { Foreground = Brushes.Gray, TextWrapping = TextWrapping.Wrap };
@@ -54,8 +59,10 @@ internal sealed class StationsPanel : Grid
         var searchLabel = new TextBlock { Text = "Find a callsign", FontSize = 11, Foreground = Brushes.Gray };
         DockPanel.SetDock(searchLabel, Dock.Top);
         DockPanel.SetDock(search, Dock.Top);
+        DockPanel.SetDock(showHeard, Dock.Top);
         left.Children.Add(searchLabel);
         left.Children.Add(search);
+        left.Children.Add(showHeard);
         left.Children.Add(list);
         SetColumn(left, 0);
         Children.Add(left);
@@ -77,6 +84,7 @@ internal sealed class StationsPanel : Grid
         Children.Add(right);
 
         search.TextChanged += (_, _) => RebuildList();
+        showHeard.Click += (_, _) => { RebuildList(); if (selected != null) ShowConversation(selected); };
         list.SelectionChanged += (_, _) =>
         {
             if (rebuilding || list.SelectedItem is not ListBoxItem { Tag: string call }) return;
@@ -125,16 +133,21 @@ internal sealed class StationsPanel : Grid
     // ---------------------------------------------------------------- station list
     sealed record Row(string Call, long LastT, int Unread, string Detail, Brush Dot);
 
+    /// <summary>Overheard traffic is shown while monitor mode is on and "Show overheard" is ticked; station IDs always
+    /// count for "last heard".</summary>
+    bool Shown(MsgRecord m) => m.Dir != MsgDir.Heard || m.Kind == "id" || (settings.Monitor && showHeard.IsChecked == true);
+
     List<Row> Rows()
     {
         var byCall = new Dictionary<string, (long last, int unread)>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in MessageStore.All)
         {
-            foreach (var call in Parties(m))
+            if (!Shown(m)) continue;
+            foreach (var call in m.Parties)
             {
                 byCall.TryGetValue(call, out var v);
                 long read = lastRead.TryGetValue(call, out var rt) ? rt : 0;
-                bool unread = m.Dir != MsgDir.Out && m.T > read && !(IsShown && call == selected);
+                bool unread = m.Dir == MsgDir.In && m.T > read && !(IsShown && call == selected);
                 byCall[call] = (Math.Max(v.last, m.T), v.unread + (unread ? 1 : 0));
             }
         }
@@ -158,14 +171,6 @@ internal sealed class StationsPanel : Grid
         rows.Insert(0, new Row(CqEntry, cq.last, cq.unread, "All stations: messages you sent to CQ", Brushes.SteelBlue));
         return rows;
     }
-
-    /// <summary>The station(s) a message is listed under: the other party, or both callsigns for overheard traffic.</summary>
-    static IEnumerable<string> Parties(MsgRecord m) => m.Dir switch
-    {
-        MsgDir.Out => new[] { m.To },
-        MsgDir.Heard => new[] { m.From, m.To },
-        _ => new[] { m.From },
-    };
 
     string Detail(string call, long last, MapItem? st)
     {
@@ -193,6 +198,7 @@ internal sealed class StationsPanel : Grid
             string q = search.Text.Trim().ToUpperInvariant();
             var rows = Rows();
             UnreadChanged?.Invoke(rows.Sum(r => r.Unread));
+            showHeard.Visibility = settings.Monitor ? Visibility.Visible : Visibility.Collapsed;
             list.Items.Clear();
             foreach (var r in rows)
             {
@@ -249,7 +255,7 @@ internal sealed class StationsPanel : Grid
     void ShowConversation(string call)
     {
         conversation.Children.Clear();
-        var msgs = MessageStore.All.Where(m => Parties(m).Contains(call, StringComparer.OrdinalIgnoreCase)).ToList();
+        var msgs = MessageStore.All.Where(m => m.Kind != "id" && Shown(m) && m.Parties.Contains(call, StringComparer.OrdinalIgnoreCase)).ToList();
         if (msgs.Count == 0)
             conversation.Children.Add(new TextBlock { Text = "No messages yet. Type below to send one.", Foreground = Brushes.Gray, Margin = new Thickness(10) });
         string? lastDay = null;
@@ -279,9 +285,10 @@ internal sealed class StationsPanel : Grid
         };
         var meta = new TextBlock { FontSize = 11, Foreground = Brushes.DimGray };
         void SetMeta() => meta.Text = $"{DateTimeOffset.FromUnixTimeMilliseconds(m.T).LocalDateTime:HH:mm}  {who}" +
-                                      (mine && m.Status != null ? $"  [{m.Status}]" : "");
+                                      (m.Via != null ? $"  · via {m.Via}" : "") +
+                                      (m.Dir != MsgDir.In && m.Status != null ? $"  [{m.Status}]" : "");
         SetMeta();
-        if (mine) m.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(SetMeta);
+        if (m.Dir != MsgDir.In) m.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(SetMeta);
         body.Children.Add(meta);
         string text = m.Kind == "report" ? "[report] " + m.Text : m.Text;
         var line = new DockPanel();
@@ -321,7 +328,7 @@ internal sealed class StationsPanel : Grid
         if (e.Action == NotifyCollectionChangedAction.Add && selected != null && e.NewItems != null)
         {
             foreach (MsgRecord m in e.NewItems)
-                if (Parties(m).Contains(selected, StringComparer.OrdinalIgnoreCase))
+                if (m.Kind != "id" && Shown(m) && m.Parties.Contains(selected, StringComparer.OrdinalIgnoreCase))
                 {
                     if (conversation.Children.Count == 1 && conversation.Children[0] is TextBlock) conversation.Children.Clear();
                     conversation.Children.Add(Bubble(m));

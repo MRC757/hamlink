@@ -6,7 +6,7 @@ using NAudio.Wave;
 namespace HamLink;
 
 internal enum Phase { Off, Idle, Busy, Tx }
-internal enum LogKind { RxText, TxText, RxVoice, TxVoice, Event, Error }
+internal enum LogKind { RxText, TxText, RxVoice, TxVoice, Event, Error, Heard }
 
 /// <summary>Receive meter snapshot, all in dBFS (a full-scale sine reads 0; floor -120).</summary>
 internal readonly record struct MeterData(float RmsDb, float PeakDb, float Tone1200Db, float Tone2200Db, int Clipped);
@@ -74,10 +74,29 @@ internal sealed class Engine
     {
         var r = radio; if (r == null || s.Transport == "tnc") return;
         int rc = r.SetModem(modem);
+        modemNow = rc != 0 ? Radio.ModemAfsk : modem;
         if (rc != 0) Log?.Invoke(LogKind.Error, $"{ModemName(modem)} could not start; using AFSK 1200", -1, null);
         else Log?.Invoke(LogKind.Event, "Modem: " + ModemName(modem), -1, null);
         Mode?.Invoke(Summary(rc != 0 ? Radio.ModemAfsk : modem));
     });
+
+    int modemNow = -1; // the selected modem while running (-1: TNC link): "via" is shown when another modem decoded a message
+
+    static string ModemShort(int modem) => modem switch
+    {
+        Radio.ModemOfdm => "OFDM",
+        Radio.ModemMt63 => "MT63",
+        Radio.ModemPsk2400 => "PSK 2400",
+        Radio.ModemPsk3600 => "PSK 3600",
+        _ => "AFSK",
+    };
+
+    /// <summary>The modem that decoded the message being handled, when it is not the selected one ("" otherwise).</summary>
+    string Via(Radio r)
+    {
+        int m = r.RxModem;
+        return m >= 0 && modemNow >= 0 && m != modemNow ? ModemShort(m) : "";
+    }
 
     static string ModemName(int modem) => modem switch
     {
@@ -240,10 +259,10 @@ internal sealed class Engine
         Positions.Apply(s);
     }
 
-    static MsgRecord Rec(MsgDir dir, string from, string to, string kind, string text, byte[]? clip, int id = -1) => new()
+    static MsgRecord Rec(MsgDir dir, string from, string to, string kind, string text, byte[]? clip, int id = -1, string via = "") => new()
     {
         T = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Dir = dir, From = from, To = to, Kind = kind, Text = text,
-        Clip = clip == null ? null : Convert.ToBase64String(clip), Id = id,
+        Clip = clip == null ? null : Convert.ToBase64String(clip), Id = id, Via = via.Length > 0 ? via : null,
     };
 
     void Queued(int id, LogKind kind, string text, short[]? clip, string dst, string mkind, string body, byte[]? clipBytes)
@@ -276,6 +295,7 @@ internal sealed class Engine
         }
         radio = r;
         r.Message += OnMessage;
+        r.Monitor += OnMonitor;
         r.Status += (id, st) => StatusChanged?.Invoke(id, st switch { 1 => "delivered", 2 => "sent", _ => "FAILED (no ACK)" });
         r.Event += t => Log?.Invoke(t.StartsWith("WARNING") ? LogKind.Error : LogKind.Event, t, -1, null); // core warnings in red
 
@@ -287,6 +307,9 @@ internal sealed class Engine
         }
         r.SetLink(tnc ? Radio.LinkTnc : Radio.LinkAudio, s.TncBaud);
         r.SetFec(s.AfskFec);
+        r.SetMonitor(s.Monitor);
+        if (!tnc) r.SetListenAll(s.ListenAll);
+        modemNow = tnc ? -1 : startModem;
         AfterStart(r);
         if (tnc) { LoopTnc(r); return; }
         Log?.Invoke(LogKind.Event, "Modem: " + ModemName(startModem), -1, null);
@@ -512,11 +535,14 @@ internal sealed class Engine
 
     void OnMessage(string src, string dst, int type, byte[] data)
     {
+        var rr = radio;
+        string via = rr == null ? "" : Via(rr);
+        string viaNote = via.Length > 0 ? $"  (via {via})" : "";
         if (type == Radio.TypeText)
         {
             string text = Encoding.UTF8.GetString(data);
-            Record?.Invoke(Rec(MsgDir.In, src, dst, "text", text, null));
-            Log?.Invoke(LogKind.RxText, $"{src}: {text}", -1, null);
+            Record?.Invoke(Rec(MsgDir.In, src, dst, "text", text, null, -1, via));
+            Log?.Invoke(LogKind.RxText, $"{src}: {text}{viaNote}", -1, null);
         }
         else if (type == Radio.TypeReport)
         {
@@ -524,16 +550,16 @@ internal sealed class Engine
             string? sum = Radio.ReportSummary(data);
             if (sum != null)
             {
-                Record?.Invoke(Rec(MsgDir.In, src, dst, "report", sum, null));
-                Log?.Invoke(LogKind.RxText, $"{src} [report] {sum}", -1, null);
+                Record?.Invoke(Rec(MsgDir.In, src, dst, "report", sum, null, -1, via));
+                Log?.Invoke(LogKind.RxText, $"{src} [report] {sum}{viaNote}", -1, null);
             }
         }
         else if (type == Radio.TypeVoice)
         {
             var pcm = radio?.VoiceDecode(data);
             if (pcm == null) { Log?.Invoke(LogKind.Error, $"voice clip from {src} could not be decoded", -1, null); return; }
-            Record?.Invoke(Rec(MsgDir.In, src, dst, "voice", $"voice clip ({pcm.Length / 8000.0:0.0} s)", data));
-            Log?.Invoke(LogKind.RxVoice, $"voice from {src} ({pcm.Length / 8000.0:0.0} s)", -1, pcm);
+            Record?.Invoke(Rec(MsgDir.In, src, dst, "voice", $"voice clip ({pcm.Length / 8000.0:0.0} s)", data, -1, via));
+            Log?.Invoke(LogKind.RxVoice, $"voice from {src} ({pcm.Length / 8000.0:0.0} s){viaNote}", -1, pcm);
             if (s.AutoPlayVoice && !s.Relay)
             {
                 try { VoicePlayer.Play(pcm, VoiceOutputDevice()); }
@@ -541,6 +567,43 @@ internal sealed class Engine
             }
         }
     }
+
+    /// <summary>Monitor mode: traffic between other stations, an acknowledgement between them, or a station ID.</summary>
+    void OnMonitor(string src, string dst, int type, int id, byte[] data)
+    {
+        var r = radio;
+        string via = r == null ? "" : Via(r);
+        string viaNote = via.Length > 0 ? $"  (via {via})" : "";
+        switch (type)
+        {
+            case Radio.TypeText:
+                string text = Encoding.UTF8.GetString(data);
+                Record?.Invoke(Rec(MsgDir.Heard, src, dst, "text", text, null, id, via));
+                Log?.Invoke(LogKind.Heard, $"{src} → {dst}: {text}{viaNote}", -1, null);
+                break;
+            case Radio.TypeReport:
+                if (Radio.ReportSummary(data) is { } sum)
+                {
+                    Record?.Invoke(Rec(MsgDir.Heard, src, dst, "report", sum, null, id, via));
+                    Log?.Invoke(LogKind.Heard, $"{src} → {dst} [report] {sum}{viaNote}", -1, null);
+                }
+                break;
+            case Radio.TypeVoice:
+                var pcm = r?.VoiceDecode(data);
+                Record?.Invoke(Rec(MsgDir.Heard, src, dst, "voice", pcm == null ? "voice clip" : $"voice clip ({pcm.Length / 8000.0:0.0} s)", data, id, via));
+                Log?.Invoke(LogKind.Heard, $"{src} → {dst}: voice clip{viaNote}", -1, pcm);
+                break;
+            case Radio.TypeAck:
+                Heard?.Invoke(dst, id, src); // dst sent message id; src acknowledged it
+                break;
+            case Radio.TypeId:
+                Record?.Invoke(Rec(MsgDir.Heard, src, "CQ", "id", "station ID", null, -1, via));
+                break;
+        }
+    }
+
+    /// <summary>Monitor mode: an overheard message (sender, message ID) was acknowledged by its recipient.</summary>
+    public event Action<string, int, string>? Heard;
 
     /// <summary>Output device index for received voice clips: the chosen one, else Windows default (-1).</summary>
     int VoiceOutputDevice()

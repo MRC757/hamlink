@@ -83,18 +83,24 @@ class Station:
         self.log_sink = log or print_entry
         self.events = collections.deque(maxlen=300)
         self.messages = collections.deque(maxlen=100)
+        self.traffic = collections.deque(maxlen=200)  # monitor mode: messages between other stations
         self.cmds = queue.Queue()
         self.audio, self.ptt, self.tnc = audio, ptt, tnc
         self.state_dir = state_dir
         self.core = hl.Core(lib, settings.callsign, relay=settings.relay, ttl=settings.ttl,
                             preamble_ms=settings.preamble_ms, seed=seed if seed is not None else int(time.time()),
-                            on_message=self._on_message, on_status=self._on_status, on_event=self._on_event)
+                            on_message=self._on_message, on_status=self._on_status, on_event=self._on_event,
+                            on_monitor=self._on_monitor)
         if settings.link == "tnc":
             self.core.set_link(hl.LINK_TNC, settings.tnc_baud)
         else:
             if self.core.set_modem(settings.modem) != 0:
                 raise RuntimeError(f"core refused modem {settings.modem}")
         self.core.set_fec(settings.afsk_fec)
+        self.core.set_monitor(settings.monitor)
+        if settings.link == "audio":
+            self.core.set_listen_all(settings.listen_all)
+        self.modem_now = hl.MODEMS.get(settings.modem, 0) if settings.link == "audio" else -1
         self.core.set_carrier_sense(settings.carrier_sense)
         self.core.set_relay(settings.relay)
         self.budget = TxBudget(settings.max_tx_seconds, settings.max_tx_percent)
@@ -119,7 +125,20 @@ class Station:
         self.events.append(e)
         self.log_sink(e)
 
-    def _on_message(self, src, dst, typ, data):
+    def _via(self):
+        m = self.core.rx_modem()
+        return hl.MODEM_NAMES.get(m) if m >= 0 and self.modem_now >= 0 and m != self.modem_now else None
+
+    def _on_monitor(self, src, dst, typ, msg_id, data):
+        via = self._via()
+        if typ == hl.TYPE_ACK:
+            for e in reversed(self.traffic):
+                if e["src"] == dst and e["id"] == msg_id:
+                    e["status"] = f"delivered (ACK from {src})"
+                    break
+            return
+        if typ == hl.TYPE_ID:
+            return
         if typ == hl.TYPE_TEXT:
             text = data.decode(errors="replace")
         elif typ == hl.TYPE_REPORT:
@@ -128,8 +147,22 @@ class Station:
             text = f"[voice clip, {len(data)} bytes]"
         else:
             return
-        self.messages.append({"t": time.time(), "src": src, "dst": dst, "text": text})
-        self.log(f"RX {src} > {dst}: {text}", "rx")
+        self.traffic.append({"t": time.time(), "src": src, "dst": dst, "id": msg_id, "text": text, "via": via,
+                             "status": None})
+        self.log(f"HEARD {src} > {dst}: {text}" + (f" (via {via})" if via else ""), "heard")
+
+    def _on_message(self, src, dst, typ, data):
+        via = self._via()
+        if typ == hl.TYPE_TEXT:
+            text = data.decode(errors="replace")
+        elif typ == hl.TYPE_REPORT:
+            text = "[report] " + self.core.report_summary(data)
+        elif typ == hl.TYPE_VOICE:
+            text = f"[voice clip, {len(data)} bytes]"
+        else:
+            return
+        self.messages.append({"t": time.time(), "src": src, "dst": dst, "text": text, "via": via})
+        self.log(f"RX {src} > {dst}: {text}" + (f" (via {via})" if via else ""), "rx")
 
     def _on_status(self, msg_id, status):
         self.log(f"message {msg_id} {status}", "status")
@@ -312,6 +345,8 @@ class Station:
             "link": self.s.link,
             "modem": self.s.modem if self.s.link == "audio" else "afsk (TNC)",
             "relay": self.s.relay,
+            "monitor": self.s.monitor,
+            "listen_all": self.s.listen_all,
             "uptime_s": (now_ms - self.started_ms) // 1000,
             "transmitting": self.tx is not None,
             "channel_busy": self.core.busy(),

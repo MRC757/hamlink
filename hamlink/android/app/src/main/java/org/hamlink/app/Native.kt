@@ -7,6 +7,9 @@ interface MeshListener {
     /** status: 0 = failed, 1 = delivered (ACKed), 2 = sent (broadcast, no ACK expected) */
     fun onStatus(msgId: Int, status: Int)
     fun onEvent(text: String)
+    /** Monitor mode: traffic between other stations (type 1/2/5), an ACK between them (type 3, msgId = the message
+     *  acknowledged) or a station ID (type 4). */
+    fun onMonitor(src: String, dst: String, type: Int, msgId: Int, data: ByteArray)
 }
 
 /** JNI surface. NOT thread safe: call everything from the engine thread only. */
@@ -19,6 +22,17 @@ object Native {
     external fun start(callsign: String, relay: Boolean, ttl: Int, preambleMs: Int, seed: Int, listener: MeshListener)
     external fun stop()
     external fun setRelay(on: Boolean)
+    /** Monitor mode: report messages between other stations through [MeshListener.onMonitor]. */
+    external fun setMonitor(on: Boolean)
+    /** Run every modem's receiver, whatever modem is selected for sending. */
+    external fun setListenAll(on: Boolean)
+    /** Inside onMessage / onMonitor: the modem that decoded the frame (-1 elsewhere). */
+    external fun rxModem(): Int
+    const val MT_ACK = 3
+    const val MT_ID = 4
+    fun modemShort(modem: Int) = when (modem) {
+        MODEM_OFDM -> "OFDM"; MODEM_MT63 -> "MT63"; MODEM_PSK2400 -> "PSK 2400"; MODEM_PSK3600 -> "PSK 3600"; else -> "AFSK"
+    }
 
     // ---- modem and link choice ----
     const val MODEM_AFSK = 0    // 1200 baud Bell 202 AFSK (default)

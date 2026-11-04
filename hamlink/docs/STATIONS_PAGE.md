@@ -6,7 +6,13 @@ Status (2026-11-04):
 * **Step 5 done** in the core (API 11): monitor mode, listen on all modems, and relays re-sending on the modem a frame
   arrived on. Tests: `tests/test_monitor.py`. Measured on the Windows PC, every receiver at once uses 1.7% of one core
   and decoded 10/10 test messages across all five modems.
-* **Next:** step 6, the settings and display in the apps and the Pi.
+* **Step 6 done:** both settings (off by default) in Windows, Android and the Pi relay.
+  * Overheard messages show grey ("≈ W1AAA → W2BBB") on the Messages page and on both stations' pages, with a
+    "Show overheard" switch, and turn "delivered" when the recipient's ACK is heard.
+  * Messages decoded by a modem other than the selected one say "via PSK 2400" (or whichever modem).
+  * Station IDs count for "last heard".
+  * The Pi web page gains a Traffic tab.
+* **Next:** step 7, Help, README and a release.
 
 A third page in the Windows and Android apps, beside **Messages** and **Map**, that shows traffic one station at a time.
 With **monitor mode** on, it also shows messages between *other* stations that this station overheard.

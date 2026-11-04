@@ -10,12 +10,14 @@ MODEMS = {"afsk": 0, "ofdm": 1, "mt63": 2, "psk2400": 3, "psk3600": 4}
 LINK_AUDIO, LINK_TNC = 0, 1
 CARRIER_SENSE = {"off": 0, "data": 1, "data_or_level": 2}
 TONES = {"ptt": 0, "1200": 1, "2200": 2, "alt": 3}
-TYPE_TEXT, TYPE_VOICE, TYPE_REPORT = 1, 2, 5
+TYPE_TEXT, TYPE_VOICE, TYPE_ACK, TYPE_ID, TYPE_REPORT = 1, 2, 3, 4, 5
+MODEM_NAMES = {0: "AFSK", 1: "OFDM", 2: "MT63", 3: "PSK 2400", 4: "PSK 3600"}
 STATUS = {0: "failed", 1: "delivered", 2: "sent"}
 
 MSG_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_char_p, C.c_char_p, C.c_int, C.c_void_p, C.c_int)
 ST_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_int, C.c_int)
 EV_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_char_p)
+MON_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_char_p, C.c_char_p, C.c_int, C.c_int, C.c_void_p, C.c_int)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(os.path.dirname(_HERE))  # hamlink/
@@ -64,6 +66,10 @@ def load(path):
         "hl_tone_fill": (C.c_float, [C.c_void_p, C.c_void_p, C.c_int, C.c_float]),
         "hl_note_external_tx": (None, [C.c_void_p, C.c_int64, C.c_int]),
         "hl_report_summary": (C.c_int, [C.c_void_p, C.c_int, C.c_char_p, C.c_int]),
+        "hl_set_monitor": (None, [C.c_void_p, C.c_int]),
+        "hl_set_monitor_callback": (None, [C.c_void_p, MON_CB, C.c_void_p]),
+        "hl_set_listen_all": (None, [C.c_void_p, C.c_int]),
+        "hl_rx_modem": (C.c_int, [C.c_void_p]),
     }
     for name, (res, args) in sig.items():
         f = getattr(L, name)
@@ -75,14 +81,32 @@ class Core:
     """One HamLink station context. Callbacks fire synchronously from inside the hl_* calls, on the calling thread."""
 
     def __init__(self, lib, callsign, relay=True, ttl=1, preamble_ms=500, seed=1,
-                 on_message=None, on_status=None, on_event=None):
+                 on_message=None, on_status=None, on_event=None, on_monitor=None):
         self.L = lib
         self._on_message, self._on_status, self._on_event = on_message, on_status, on_event
+        self._on_monitor = on_monitor
         # keep the ctypes callback objects alive for the lifetime of the context
         self._cbs = (MSG_CB(self._msg), ST_CB(self._st), EV_CB(self._ev))
+        self._mon = MON_CB(self._monitor)
         self.c = lib.hl_create(callsign.encode(), 1 if relay else 0, ttl, preamble_ms, seed, *self._cbs, None)
         if not self.c:
             raise RuntimeError("hl_create failed (callsign?)")
+        lib.hl_set_monitor_callback(self.c, self._mon, None)
+
+    def _monitor(self, _u, src, dst, typ, msg_id, data, n):
+        if self._on_monitor:
+            self._on_monitor(src.decode(errors="replace"), dst.decode(errors="replace"), typ, msg_id,
+                             C.string_at(data, n) if n > 0 else b"")
+
+    def set_monitor(self, on):
+        self.L.hl_set_monitor(self.c, 1 if on else 0)
+
+    def set_listen_all(self, on):
+        self.L.hl_set_listen_all(self.c, 1 if on else 0)
+
+    def rx_modem(self):
+        """Inside a message or monitor callback: the modem that decoded the frame (-1 elsewhere)."""
+        return self.L.hl_rx_modem(self.c)
 
     def _msg(self, _u, src, dst, typ, data, n):
         if self._on_message:

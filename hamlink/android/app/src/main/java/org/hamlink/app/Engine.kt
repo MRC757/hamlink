@@ -55,6 +55,7 @@ class Engine(private val ctx: Context) : MeshListener {
     fun setModem(modem: Int) = post {
         if (settings.transport == "tnc") return@post
         val rc = Native.setModem(modem)
+        modemNow = if (rc != 0) Native.MODEM_AFSK else modem
         if (rc != 0) Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "${Native.modemName(modem)} could not start; using AFSK 1200"))
         else Hub.addLog(Hub.LogItem(Hub.Kind.EVENT, "Modem: " + Native.modemName(modem)))
         updateSummary(if (rc != 0) Native.MODEM_AFSK else modem)
@@ -189,8 +190,17 @@ class Engine(private val ctx: Context) : MeshListener {
         Positions.apply(ctx)
     }
 
-    private fun record(dir: MsgDir, from: String, to: String, kind: String, text: String, clip: ByteArray?, id: Int = -1) =
-        MsgRecord(System.currentTimeMillis(), dir, from, to, kind, text, clip, id)
+    private fun record(dir: MsgDir, from: String, to: String, kind: String, text: String, clip: ByteArray?, id: Int = -1,
+                       via: String? = null) =
+        MsgRecord(System.currentTimeMillis(), dir, from, to, kind, text, clip, id, via = via)
+
+    @Volatile private var modemNow = -1 // the selected modem while running (-1: TNC link)
+
+    /** The modem that decoded the message being handled, when it is not the selected one (null otherwise). */
+    private fun via(): String? {
+        val m = Native.rxModem()
+        return if (m >= 0 && modemNow >= 0 && m != modemNow) Native.modemShort(m) else null
+    }
 
     private fun queued(id: Int, kind: Hub.Kind, text: String, clip: ShortArray?, rec: MsgRecord? = null) {
         if (id < 0) {
@@ -204,19 +214,21 @@ class Engine(private val ctx: Context) : MeshListener {
 
     // ------------------------------------------------------------------ engine -> UI (MeshListener)
     override fun onMessage(src: String, dst: String, type: Int, data: ByteArray) {
+        val via = via()
+        val viaNote = via?.let { "  (via $it)" } ?: ""
         when (type) {
             Native.MT_TEXT -> {
                 val text = String(data, Charsets.UTF_8)
-                val rec = record(MsgDir.IN, src, dst, "text", text, null)
+                val rec = record(MsgDir.IN, src, dst, "text", text, null, via = via)
                 Hub.ui { MessageStore.add(rec) }
-                Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src: $text"))
+                Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src: $text$viaNote"))
             }
             Native.MT_REPORT -> {
                 // The core already put it on the map; the log gets the one-line summary. Unknown future types: ignored here.
                 Native.reportSummary(data)?.let {
-                    val rec = record(MsgDir.IN, src, dst, "report", it, null)
+                    val rec = record(MsgDir.IN, src, dst, "report", it, null, via = via)
                     Hub.ui { MessageStore.add(rec) }
-                    Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src [report] $it"))
+                    Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src [report] $it$viaNote"))
                 }
             }
             Native.MT_VOICE -> {
@@ -224,9 +236,9 @@ class Engine(private val ctx: Context) : MeshListener {
                 if (pcm == null) {
                     Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "voice clip from $src could not be decoded"))
                 } else {
-                    val rec = record(MsgDir.IN, src, dst, "voice", "voice clip (%.1f s)".format(pcm.size / 8000.0), data)
+                    val rec = record(MsgDir.IN, src, dst, "voice", "voice clip (%.1f s)".format(pcm.size / 8000.0), data, via = via)
                     Hub.ui { MessageStore.add(rec) }
-                    Hub.addLog(Hub.LogItem(Hub.Kind.RX_VOICE, "voice from $src (%.1f s)".format(pcm.size / 8000.0), clip = pcm))
+                    Hub.addLog(Hub.LogItem(Hub.Kind.RX_VOICE, "voice from $src (%.1f s)$viaNote".format(pcm.size / 8000.0), clip = pcm))
                     if (settings.autoPlayVoice && !settings.relay) VoicePlayer.play(ctx, pcm)
                 }
             }
@@ -236,6 +248,36 @@ class Engine(private val ctx: Context) : MeshListener {
     override fun onStatus(msgId: Int, status: Int) {
         val text = when (status) { 1 -> "delivered"; 2 -> "sent"; else -> "FAILED (no ACK)" }
         Hub.ui { Hub.status[msgId] = text; MessageStore.setStatus(msgId, text) }
+    }
+
+    override fun onMonitor(src: String, dst: String, type: Int, msgId: Int, data: ByteArray) {
+        val via = via()
+        val viaNote = via?.let { "  (via $it)" } ?: ""
+        when (type) {
+            Native.MT_TEXT -> {
+                val text = String(data, Charsets.UTF_8)
+                val rec = record(MsgDir.HEARD, src, dst, "text", text, null, msgId, via)
+                Hub.ui { MessageStore.add(rec) }
+                Hub.addLog(Hub.LogItem(Hub.Kind.HEARD, "$src → $dst: $text$viaNote"))
+            }
+            Native.MT_REPORT -> Native.reportSummary(data)?.let {
+                val rec = record(MsgDir.HEARD, src, dst, "report", it, null, msgId, via)
+                Hub.ui { MessageStore.add(rec) }
+                Hub.addLog(Hub.LogItem(Hub.Kind.HEARD, "$src → $dst [report] $it$viaNote"))
+            }
+            Native.MT_VOICE -> {
+                val pcm = Native.voiceDecode(data)
+                val rec = record(MsgDir.HEARD, src, dst, "voice",
+                    if (pcm == null) "voice clip" else "voice clip (%.1f s)".format(pcm.size / 8000.0), data, msgId, via)
+                Hub.ui { MessageStore.add(rec) }
+                Hub.addLog(Hub.LogItem(Hub.Kind.HEARD, "$src → $dst: voice clip$viaNote", clip = pcm))
+            }
+            Native.MT_ACK -> Hub.ui { MessageStore.setHeardStatus(dst, msgId, "delivered (ACK from $src)") } // dst sent it
+            Native.MT_ID -> {
+                val rec = record(MsgDir.HEARD, src, "CQ", "id", "station ID", null, via = via)
+                Hub.ui { MessageStore.add(rec) }
+            }
+        }
     }
 
     override fun onEvent(text: String) {
@@ -307,6 +349,10 @@ class Engine(private val ctx: Context) : MeshListener {
         }
         Native.setLink(if (tnc) Native.LINK_TNC else Native.LINK_AUDIO, settings.tncBaud)
         Native.setFec(settings.afskFec)
+        Native.setMonitor(settings.monitor)
+        if (!tnc) Native.setListenAll(settings.listenAll)
+        modemNow = if (tnc) -1 else startModem
+        Hub.ui { Hub.monitor = settings.monitor }
         afterStart()
         if (tnc) { loopTnc(); return }
         val manual = settings.pttLine == "MANUAL"
