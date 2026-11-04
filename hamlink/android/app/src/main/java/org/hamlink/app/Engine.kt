@@ -96,7 +96,7 @@ class Engine(private val ctx: Context) : MeshListener {
     fun sendText(dst: String, text: String) = post {
         val bytes = text.toByteArray(Charsets.UTF_8)
         val id = Native.send(dst, Native.MT_TEXT, bytes, dst != "CQ", now())
-        queued(id, Hub.Kind.TX_TEXT, "to $dst: $text", null)
+        queued(id, Hub.Kind.TX_TEXT, "to $dst: $text", null, record(MsgDir.OUT, settings.callsign, dst, "text", text, null, id))
     }
 
     fun sendVoice(dst: String, pcm8k: ShortArray) = post {
@@ -107,7 +107,8 @@ class Engine(private val ctx: Context) : MeshListener {
         }
         val id = Native.send(dst, Native.MT_VOICE, clip, dst != "CQ", now())
         val secs = pcm8k.size / 8000.0
-        queued(id, Hub.Kind.TX_VOICE, "voice to $dst (%.1f s, %d bytes)".format(secs, clip.size), pcm8k)
+        queued(id, Hub.Kind.TX_VOICE, "voice to $dst (%.1f s, %d bytes)".format(secs, clip.size), pcm8k,
+            record(MsgDir.OUT, settings.callsign, dst, "voice", "voice clip (%.1f s)".format(secs), clip, id))
     }
 
     // ------------------------------------------------------------------ reports and map (UI -> engine)
@@ -116,7 +117,8 @@ class Engine(private val ctx: Context) : MeshListener {
         val r = Native.reportSend(dst, schema, kv, dst != "CQ", now())
         if (r.startsWith("OK:")) {
             val id = r.substring(3).toIntOrNull() ?: -1
-            Hub.ui { if (id >= 0) Hub.status[id] = "queued" }
+            val rec = record(MsgDir.OUT, settings.callsign, dst, "report", "$schema report", null, id)
+            Hub.ui { if (id >= 0) Hub.status[id] = "queued"; MessageStore.add(rec); MessageStore.setStatus(id, "queued") }
             Hub.addLog(Hub.LogItem(Hub.Kind.TX_TEXT, "$schema report sent to $dst", msgId = id))
             Hub.ui { done(null) }
         } else {
@@ -132,8 +134,12 @@ class Engine(private val ctx: Context) : MeshListener {
         if (f == null) { Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "no position to send yet")); return }
         val kv = "loc=%.6f,%.6f\ntime=%d\nsource=%s\n".format(java.util.Locale.US, f.lat, f.lon, System.currentTimeMillis() / 1000, f.source)
         val r = Native.reportSend("CQ", "POS", kv, false, now())
-        if (r.startsWith("OK:")) Hub.addLog(Hub.LogItem(Hub.Kind.TX_TEXT, "position sent (${f.source})", msgId = r.substring(3).toIntOrNull() ?: -1))
-        else Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "position not sent: " + r.removePrefix("ERR:")))
+        if (r.startsWith("OK:")) {
+            val id = r.substring(3).toIntOrNull() ?: -1
+            val rec = record(MsgDir.OUT, settings.callsign, "CQ", "report", "position (${f.source})", null, id)
+            Hub.ui { MessageStore.add(rec); MessageStore.setStatus(id, "queued") }
+            Hub.addLog(Hub.LogItem(Hub.Kind.TX_TEXT, "position sent (${f.source})", msgId = id))
+        } else Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "position not sent: " + r.removePrefix("ERR:")))
     }
 
     /** Fetch the details text for a map icon. */
@@ -183,12 +189,15 @@ class Engine(private val ctx: Context) : MeshListener {
         Positions.apply(ctx)
     }
 
-    private fun queued(id: Int, kind: Hub.Kind, text: String, clip: ShortArray?) {
+    private fun record(dir: MsgDir, from: String, to: String, kind: String, text: String, clip: ByteArray?, id: Int = -1) =
+        MsgRecord(System.currentTimeMillis(), dir, from, to, kind, text, clip, id)
+
+    private fun queued(id: Int, kind: Hub.Kind, text: String, clip: ShortArray?, rec: MsgRecord? = null) {
         if (id < 0) {
             val why = when (id) { -2 -> "send queue full, wait for pending messages"; -3 -> "message too long"; else -> "error $id" }
             Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "not sent: $why"))
         } else {
-            Hub.ui { Hub.status[id] = "queued" }
+            Hub.ui { Hub.status[id] = "queued"; if (rec != null) { MessageStore.add(rec); MessageStore.setStatus(id, "queued") } }
             Hub.addLog(Hub.LogItem(kind, text, msgId = id, clip = clip))
         }
     }
@@ -196,16 +205,27 @@ class Engine(private val ctx: Context) : MeshListener {
     // ------------------------------------------------------------------ engine -> UI (MeshListener)
     override fun onMessage(src: String, dst: String, type: Int, data: ByteArray) {
         when (type) {
-            Native.MT_TEXT -> Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src: " + String(data, Charsets.UTF_8)))
+            Native.MT_TEXT -> {
+                val text = String(data, Charsets.UTF_8)
+                val rec = record(MsgDir.IN, src, dst, "text", text, null)
+                Hub.ui { MessageStore.add(rec) }
+                Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src: $text"))
+            }
             Native.MT_REPORT -> {
                 // The core already put it on the map; the log gets the one-line summary. Unknown future types: ignored here.
-                Native.reportSummary(data)?.let { Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src [report] $it")) }
+                Native.reportSummary(data)?.let {
+                    val rec = record(MsgDir.IN, src, dst, "report", it, null)
+                    Hub.ui { MessageStore.add(rec) }
+                    Hub.addLog(Hub.LogItem(Hub.Kind.RX_TEXT, "$src [report] $it"))
+                }
             }
             Native.MT_VOICE -> {
                 val pcm = Native.voiceDecode(data)
                 if (pcm == null) {
                     Hub.addLog(Hub.LogItem(Hub.Kind.ERROR, "voice clip from $src could not be decoded"))
                 } else {
+                    val rec = record(MsgDir.IN, src, dst, "voice", "voice clip (%.1f s)".format(pcm.size / 8000.0), data)
+                    Hub.ui { MessageStore.add(rec) }
                     Hub.addLog(Hub.LogItem(Hub.Kind.RX_VOICE, "voice from $src (%.1f s)".format(pcm.size / 8000.0), clip = pcm))
                     if (settings.autoPlayVoice && !settings.relay) VoicePlayer.play(ctx, pcm)
                 }
@@ -214,7 +234,8 @@ class Engine(private val ctx: Context) : MeshListener {
     }
 
     override fun onStatus(msgId: Int, status: Int) {
-        Hub.ui { Hub.status[msgId] = when (status) { 1 -> "delivered"; 2 -> "sent"; else -> "FAILED (no ACK)" } }
+        val text = when (status) { 1 -> "delivered"; 2 -> "sent"; else -> "FAILED (no ACK)" }
+        Hub.ui { Hub.status[msgId] = text; MessageStore.setStatus(msgId, text) }
     }
 
     override fun onEvent(text: String) {

@@ -30,6 +30,7 @@ internal sealed class Engine
 
     public event Action<LogKind, string, int, short[]?>? Log;   // kind, text, msgId (-1 none), voice clip
     public event Action<int, string>? StatusChanged;            // msgId, text
+    public event Action<MsgRecord>? Record;                     // a message sent or received, for the message history
     public event Action<Phase, float>? PhaseChanged;
     public event Action<string, string>? Info;                  // audio route, PTT status
     public event Action<MeterData>? Meter;                      // ~10 Hz
@@ -135,7 +136,8 @@ internal sealed class Engine
     {
         var r = radio; if (r == null) return;
         var bytes = Encoding.UTF8.GetBytes(text);
-        Queued(r.Send(dst, Radio.TypeText, bytes, dst != "CQ", Now()), LogKind.TxText, $"to {dst}: {text}", null);
+        Queued(r.Send(dst, Radio.TypeText, bytes, dst != "CQ", Now()), LogKind.TxText, $"to {dst}: {text}", null,
+            dst, "text", text, null);
     });
 
     public void SendVoice(string dst, short[] pcm8k) => cmds.Enqueue(() =>
@@ -144,7 +146,8 @@ internal sealed class Engine
         var clip = r.VoiceEncode(pcm8k);
         if (clip == null) { Log?.Invoke(LogKind.Error, "voice encode failed", -1, null); return; }
         Queued(r.Send(dst, Radio.TypeVoice, clip, dst != "CQ", Now()), LogKind.TxVoice,
-            $"voice to {dst} ({pcm8k.Length / 8000.0:0.0} s, {clip.Length} bytes)", pcm8k);
+            $"voice to {dst} ({pcm8k.Length / 8000.0:0.0} s, {clip.Length} bytes)", pcm8k,
+            dst, "voice", $"voice clip ({pcm8k.Length / 8000.0:0.0} s)", clip);
     });
 
     // ------------------------------------------------------------------ reports and map (UI -> engine)
@@ -155,6 +158,7 @@ internal sealed class Engine
         if (r == null) { done("Start the radio first."); return; }
         int id = r.ReportSend(dst, schema, kv, dst != "CQ", Now(), out string err);
         if (id < 0) { done(err); return; }
+        Record?.Invoke(Rec(MsgDir.Out, s.Callsign, dst, "report", $"{schema} report", null, id));
         Log?.Invoke(LogKind.TxText, $"{schema} report sent to {dst}", id, null);
         StatusChanged?.Invoke(id, "queued");
         done(null);
@@ -172,7 +176,12 @@ internal sealed class Engine
             $"loc={f.Lat:0.000000},{f.Lon:0.000000}\ntime={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nsource={f.Source}\n");
         int id = r.ReportSend("CQ", "POS", kv, false, Now(), out string err);
         if (id < 0) Log?.Invoke(LogKind.Error, "position not sent: " + err, -1, null);
-        else { Log?.Invoke(LogKind.TxText, $"position sent ({f.Source})", id, null); StatusChanged?.Invoke(id, "queued"); }
+        else
+        {
+            Record?.Invoke(Rec(MsgDir.Out, s.Callsign, "CQ", "report", $"position ({f.Source})", null, id));
+            Log?.Invoke(LogKind.TxText, $"position sent ({f.Source})", id, null);
+            StatusChanged?.Invoke(id, "queued");
+        }
     }
 
     /// <summary>Fetch the details text for a map icon (callback runs on the engine thread).</summary>
@@ -231,7 +240,13 @@ internal sealed class Engine
         Positions.Apply(s);
     }
 
-    void Queued(int id, LogKind kind, string text, short[]? clip)
+    static MsgRecord Rec(MsgDir dir, string from, string to, string kind, string text, byte[]? clip, int id = -1) => new()
+    {
+        T = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Dir = dir, From = from, To = to, Kind = kind, Text = text,
+        Clip = clip == null ? null : Convert.ToBase64String(clip), Id = id,
+    };
+
+    void Queued(int id, LogKind kind, string text, short[]? clip, string dst, string mkind, string body, byte[]? clipBytes)
     {
         if (id < 0)
         {
@@ -240,6 +255,7 @@ internal sealed class Engine
         }
         else
         {
+            Record?.Invoke(Rec(MsgDir.Out, s.Callsign, dst, mkind, body, clipBytes, id));
             Log?.Invoke(kind, text, id, clip);
             StatusChanged?.Invoke(id, "queued");
         }
@@ -498,18 +514,25 @@ internal sealed class Engine
     {
         if (type == Radio.TypeText)
         {
-            Log?.Invoke(LogKind.RxText, $"{src}: {Encoding.UTF8.GetString(data)}", -1, null);
+            string text = Encoding.UTF8.GetString(data);
+            Record?.Invoke(Rec(MsgDir.In, src, dst, "text", text, null));
+            Log?.Invoke(LogKind.RxText, $"{src}: {text}", -1, null);
         }
         else if (type == Radio.TypeReport)
         {
             // The core already put it on the map; the log gets the one-line summary. Unknown future types are ignored here.
             string? sum = Radio.ReportSummary(data);
-            if (sum != null) Log?.Invoke(LogKind.RxText, $"{src} [report] {sum}", -1, null);
+            if (sum != null)
+            {
+                Record?.Invoke(Rec(MsgDir.In, src, dst, "report", sum, null));
+                Log?.Invoke(LogKind.RxText, $"{src} [report] {sum}", -1, null);
+            }
         }
         else if (type == Radio.TypeVoice)
         {
             var pcm = radio?.VoiceDecode(data);
             if (pcm == null) { Log?.Invoke(LogKind.Error, $"voice clip from {src} could not be decoded", -1, null); return; }
+            Record?.Invoke(Rec(MsgDir.In, src, dst, "voice", $"voice clip ({pcm.Length / 8000.0:0.0} s)", data));
             Log?.Invoke(LogKind.RxVoice, $"voice from {src} ({pcm.Length / 8000.0:0.0} s)", -1, pcm);
             if (s.AutoPlayVoice && !s.Relay)
             {

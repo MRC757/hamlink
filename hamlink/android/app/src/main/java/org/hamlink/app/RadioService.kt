@@ -48,6 +48,7 @@ class RadioService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        MessageStore.load(this) // once per process; the activity may not have run (service restarted by Android)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "HamLink radio", NotificationManager.IMPORTANCE_LOW))
         val notif: Notification = Notification.Builder(this, CHANNEL)

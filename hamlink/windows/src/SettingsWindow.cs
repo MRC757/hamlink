@@ -154,6 +154,19 @@ internal sealed class SettingsWindow : Window
 
         Row(panel, ttlLabel, ttl);
         panel.Children.Add(auto);
+        var clearHistory = new Button
+        {
+            Content = "Clear message history", Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 10, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = $"Messages are kept for {MessageStore.RetentionDays} days ({MessageStore.FilePath}). This deletes them now.",
+        };
+        clearHistory.Click += (_, _) =>
+        {
+            if (MessageBox.Show(this, "Delete every stored message? This cannot be undone.", "Clear message history",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK)
+                MessageStore.Clear();
+        };
+        panel.Children.Add(clearHistory);
         panel.Children.Add(new TextBlock
         {
             Margin = new Thickness(0, 10, 0, 0),

@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Hub.theme = Settings(this).theme
+        MessageStore.load(this)
         setContent {
             val dark = when (Hub.theme) { THEME_DARK -> true; THEME_LIGHT -> false; else -> isSystemInDarkTheme() }
             // the app draws behind the status and navigation bars: their icons must contrast with our background
@@ -427,6 +428,16 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                     Row(verticalAlignment = Alignment.CenterVertically) { Switch(repair, { repair = it }); Box(Modifier.width(8.dp)); Text("Repair single-bit errors in received frames") }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }); Box(Modifier.width(8.dp)); Text("Auto-play received voice") }
+                var confirmClear by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { confirmClear = true }) { Text("Clear message history") }
+                Text("Messages are kept for ${MessageStore.RETENTION_DAYS} days.", style = MaterialTheme.typography.bodySmall)
+                if (confirmClear) AlertDialog(
+                    onDismissRequest = { confirmClear = false },
+                    title = { Text("Clear message history") },
+                    text = { Text("Delete every stored message? This cannot be undone.") },
+                    confirmButton = { TextButton(onClick = { MessageStore.clear(); confirmClear = false }) { Text("Delete") } },
+                    dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+                )
                 Text("If the radio is running, Save restarts it with the new settings.", style = MaterialTheme.typography.bodySmall)
             }
         },

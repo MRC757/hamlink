@@ -81,7 +81,10 @@ public partial class MainWindow : Window
         engine.StatusChanged += (id, text) => Dispatcher.BeginInvoke(() =>
         {
             if (byId.TryGetValue(id, out var it)) it.Status = text;
+            MessageStore.SetStatus(id, text);
         });
+        MessageStore.Load();
+        engine.Record += r => Dispatcher.BeginInvoke(() => MessageStore.Add(r));
         engine.PhaseChanged += (phase, level) => Dispatcher.BeginInvoke(() => ShowPhase(phase, level));
         engine.Mode += text => Dispatcher.BeginInvoke(() => ModeText.Text = text);
         engine.ManualState += (on, stage, pending) => Dispatcher.BeginInvoke(() =>
