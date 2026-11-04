@@ -149,6 +149,22 @@ HL_API void HL_CALL hl_set_report_repeat(hl_ctx *c, int extra_copies, int interv
 #define HL_CS_DATA 1          /* hold off only while data is detected (AFSK carrier detect). With OFDM, also on level */
 #define HL_CS_DATA_OR_LEVEL 2 /* data detected, or audio above busy_threshold (voice on the channel). Default */
 HL_API void HL_CALL hl_set_carrier_sense(hl_ctx *c, int mode);
+
+/* (API v11) Listen on all modems: every receiver runs (AFSK, OFDM, MT63, PSK 2400/3600), whatever modem is selected, and
+ * channel busy counts them all. Transmit stays on the selected modem, except that relayed frames go out on the modem
+ * they arrived on. Replies and ACKs still use the selected modem. Off by default. */
+HL_API void HL_CALL hl_set_listen_all(hl_ctx *c, int on);
+/* (API v11) Inside a message or monitor callback: the modem (HL_MODEM_*) that decoded the frame; -1 elsewhere. */
+HL_API int HL_CALL hl_rx_modem(hl_ctx *c);
+
+/* (API v11) Monitor mode: messages between other stations are reassembled and reported through the monitor callback,
+ * never acknowledged; relaying is unaffected. The callback also gets overheard ACKs (type 3, msg_id = the message
+ * acknowledged) and station IDs (type 4, dst "CQ"). Overheard position and status reports update the map. Off by
+ * default. */
+typedef void(HL_CALL *hl_monitor_cb)(void *user, const char *src, const char *dst, int type, int msg_id,
+                                     const uint8_t *data, int len);
+HL_API void HL_CALL hl_set_monitor(hl_ctx *c, int on);
+HL_API void HL_CALL hl_set_monitor_callback(hl_ctx *c, hl_monitor_cb cb, void *user);
 /* Single-bit repair of AFSK frames that fail their CRC (default on). Only the 8 least certain bit decisions are tried,
  * a repair is accepted only when exactly one candidate passes, and repaired frames must pass a structural check. */
 HL_API void HL_CALL hl_set_bit_repair(hl_ctx *c, int on);

@@ -17,7 +17,7 @@
 #include "tone.h"
 #include "voice.h"
 
-#define HL_API_VERSION 10
+#define HL_API_VERSION 11
 #define HL_FEC_DEFAULT 16
 
 #define REPEAT_SLOTS 8
@@ -46,6 +46,11 @@ struct hl_ctx {
     mt63_tx_t *mtx;
     mt63_rx_t *mrx;
     psk_rx_t *prx;
+    int listen_all;              /* run every receiver, whatever modem is selected (hl_set_listen_all) */
+    int rx_modem;                /* modem that decoded the frame being handled (hl_rx_modem), -1 outside a frame */
+    hl_monitor_cb on_mon;        /* monitor mode callback (hl_set_monitor_callback) */
+    void *mon_user;
+    int monitor;
     kiss_dec_t kiss;
     nmea_t nmea;
     map_model_t *map;
@@ -72,6 +77,12 @@ struct hl_ctx {
 
 static int is_psk(int modem) { return modem == HL_MODEM_PSK2400 || modem == HL_MODEM_PSK3600; }
 static int psk_mode(int modem) { return modem == HL_MODEM_PSK3600 ? PSK_8PSK : PSK_QPSK; }
+/* Frames handed to the mesh next were decoded by this modem (-1: none). Relays of them go out on it again; the selected
+ * modem is passed as -1 so its frames share bursts with our own. */
+static void rx_from(hl_ctx *c, int modem) {
+    c->rx_modem = modem;
+    mesh_set_rx_modem(c->mesh, modem == c->modem ? -1 : modem);
+}
 
 static int64_t unix_now(hl_ctx *c, int64_t now_ms) {
     return c->clock_set ? c->clock_unix + (now_ms - c->clock_ms) / 1000 : 0;
@@ -103,6 +114,17 @@ static void cb_message(void *u, const char *src, const char *dst, int type, cons
     }
     if (c->on_msg) c->on_msg(c->user, src, dst, type, data, (int)len);
 }
+static void cb_monitor(void *u, const char *src, const char *dst, int type, uint16_t id, const uint8_t *data,
+                       size_t len) {
+    hl_ctx *c = (hl_ctx *)u;
+    if (type == MT_REPORT) {
+        /* an overheard position or SITREP still places the station on the map: where it is does not depend on whom it
+         * was reporting to */
+        if (report_seen(c, src, data, len, c->last_ms)) return;
+        if (c->map) map_ingest(c->map, src, data, len, unix_now(c, c->last_ms));
+    }
+    if (c->on_mon) c->on_mon(c->mon_user, src, dst, type, (int)id, data, (int)len);
+}
 static void cb_status(void *u, uint16_t id, int status) {
     hl_ctx *c = (hl_ctx *)u;
     if (c->on_status) c->on_status(c->user, (int)id, status);
@@ -124,6 +146,7 @@ hl_ctx *HL_CALL hl_create(const char *callsign, int relay, int ttl, int preamble
     c->on_status = on_status;
     c->on_event = on_event;
     c->user = user;
+    c->rx_modem = -1;
     audiocheck_init(&c->audiocheck);
     if (preamble_ms < 100) preamble_ms = 100;
     if (preamble_ms > 2000) preamble_ms = 2000;
@@ -202,8 +225,8 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
         afsk_demod_process(c->demod, pcm, (size_t)n);
         meter_feed(&c->meter, pcm, (size_t)n);
         if (c->orx) ofdm_rx_process(c->orx, pcm, (size_t)n);
-        if (c->mrx && c->modem == HL_MODEM_MT63) mt63_rx_process(c->mrx, pcm, (size_t)n);
-        if (c->prx && is_psk(c->modem)) psk_rx_process(c->prx, pcm, (size_t)n);
+        if (c->mrx && (c->modem == HL_MODEM_MT63 || c->listen_all)) mt63_rx_process(c->mrx, pcm, (size_t)n);
+        if (c->prx && (is_psk(c->modem) || c->listen_all)) psk_rx_process(c->prx, pcm, (size_t)n);
         if (c->link == HL_LINK_AUDIO && audiocheck_feed(&c->audiocheck, pcm, (size_t)n) && c->on_event) {
             char w[400];
             snprintf(w, sizeof w, "WARNING: received transmissions drop by about %.0f dB after their first second. Something "
@@ -215,6 +238,7 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
     }
     uint8_t frame[HDLC_MAX_FRAME];
     int len, repaired;
+    rx_from(c, HL_MODEM_AFSK);
     while ((len = afsk_demod_next_frame_ex(c->demod, frame, sizeof frame, &repaired)) > 0) {
         if (repaired && !mesh_frame_plausible(frame, (size_t)len)) { c->repair_rejected++; continue; }
         mesh_rx_frame(c->mesh, frame, (size_t)len, (uint64_t)now_ms);
@@ -223,6 +247,7 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
         uint8_t pl[OFDM_MAX_PAYLOAD];
         char call[10];
         int flips, plen;
+        rx_from(c, HL_MODEM_OFDM);
         while ((plen = ofdm_rx_next(c->orx, pl, call, &flips)) > 0) {
             const uint8_t *fr[16];
             size_t fl[16];
@@ -230,22 +255,29 @@ float HL_CALL hl_process_audio(hl_ctx *c, const int16_t *pcm, int n, int64_t now
             for (int i = 0; i < nf; i++) mesh_rx_frame(c->mesh, fr[i], fl[i], (uint64_t)now_ms);
         }
     }
-    if (c->mrx && c->modem == HL_MODEM_MT63) {
+    if (c->mrx && (c->modem == HL_MODEM_MT63 || c->listen_all)) {
         uint8_t mf[MT63_MAX_FRAME];
         int ml;
+        rx_from(c, HL_MODEM_MT63);
         while ((ml = mt63_rx_next(c->mrx, mf, sizeof mf)) > 0) mesh_rx_frame(c->mesh, mf, (size_t)ml, (uint64_t)now_ms);
     }
-    if (c->prx && is_psk(c->modem)) {
+    if (c->prx && (is_psk(c->modem) || c->listen_all)) {
         uint8_t pf[PSK_MAX_FRAME];
-        int pl;
-        while ((pl = psk_rx_next(c->prx, pf, sizeof pf)) > 0) mesh_rx_frame(c->mesh, pf, (size_t)pl, (uint64_t)now_ms);
+        int pl, mode;
+        while ((pl = psk_rx_next_mode(c->prx, pf, sizeof pf, &mode)) > 0) {
+            rx_from(c, mode == PSK_8PSK ? HL_MODEM_PSK3600 : HL_MODEM_PSK2400);
+            mesh_rx_frame(c->mesh, pf, (size_t)pl, (uint64_t)now_ms);
+        }
     }
+    rx_from(c, -1);
     float level = afsk_demod_level(c->demod);
     /* Data carrier detect: AFSK flags/clock, the MT63 receiver's lock, or a PSK frame in progress. With any modem but
      * AFSK selected, "data only" still uses the level too, so its transmissions hold us off before (or without) a lock. */
-    int mt63 = c->modem == HL_MODEM_MT63;
+    /* Listening to all modems, every running receiver counts. */
+    int mt63 = c->modem == HL_MODEM_MT63 || c->listen_all;
     int data = afsk_demod_dcd(c->demod) || (mt63 && c->mrx && mt63_rx_locked(c->mrx)) ||
-               (is_psk(c->modem) && c->prx && psk_rx_busy(c->prx));
+               ((is_psk(c->modem) || c->listen_all) && c->prx && psk_rx_busy(c->prx)) ||
+               ((c->modem == HL_MODEM_OFDM || c->listen_all) && c->orx && ofdm_rx_busy(c->orx));
     int loud = level > busy_threshold;
     c->busy = c->carrier_mode == HL_CS_OFF ? 0
             : c->carrier_mode == HL_CS_DATA ? (data || (c->modem != HL_MODEM_AFSK && loud))
@@ -268,8 +300,13 @@ int HL_CALL hl_send(hl_ctx *c, const char *dst, int type, const uint8_t *data, i
 const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_samples) {
     if (n_samples) *n_samples = 0;
     if (c->link != HL_LINK_AUDIO) return NULL;
-    int n = mesh_poll_tx(c->mesh, (uint64_t)now_ms, c->txbuf, sizeof c->txbuf, c->txlens, 32);
+    int bm = -1;
+    int n = mesh_poll_tx_modem(c->mesh, (uint64_t)now_ms, c->txbuf, sizeof c->txbuf, c->txlens, 32, &bm);
     if (n <= 0) return NULL;
+    /* Relayed frames go out on the modem they arrived on; everything else on the selected one. */
+    int modem = bm < 0 ? c->modem : bm;
+    if (modem == HL_MODEM_OFDM && !c->otx) c->otx = ofdm_tx_create();
+    if (modem == HL_MODEM_MT63 && !c->mtx) c->mtx = mt63_tx_create();
     const uint8_t *frames[32];
     size_t off = 0;
     for (int i = 0; i < n; i++) {
@@ -279,9 +316,9 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
     int noise = (c->preamble_ms + 179) / 180; /* OFDM lead-in symbols are 180 ms each */
     if (noise < 1) noise = 1;
     if (noise > 6) noise = 6;
-    size_t cap = c->modem == HL_MODEM_OFDM && c->otx ? ofdm_burst_max_samples(c->txlens, n, noise)
-               : c->modem == HL_MODEM_MT63 && c->mtx ? mt63_burst_max_samples(c->txlens, n, c->preamble_ms)
-               : is_psk(c->modem) ? psk_burst_max_samples(c->txlens, n, c->preamble_ms, psk_mode(c->modem))
+    size_t cap = modem == HL_MODEM_OFDM && c->otx ? ofdm_burst_max_samples(c->txlens, n, noise)
+               : modem == HL_MODEM_MT63 && c->mtx ? mt63_burst_max_samples(c->txlens, n, c->preamble_ms)
+               : is_psk(modem) ? psk_burst_max_samples(c->txlens, n, c->preamble_ms, psk_mode(modem))
                                                      : modem_burst_max_samples_fec(c->txlens, n, c->preamble_ms, 2, c->fec);
     if (cap == 0) return NULL;
     if (cap > c->txcap) {
@@ -293,13 +330,13 @@ const int16_t *HL_CALL hl_poll_tx(hl_ctx *c, int64_t now_ms, float amp, int *n_s
     if (amp < 0.01f) amp = 0.01f;
     if (amp > 1.0f) amp = 1.0f;
     size_t k;
-    if (c->modem == HL_MODEM_OFDM && c->otx) {
+    if (modem == HL_MODEM_OFDM && c->otx) {
         k = ofdm_encode_burst(c->otx, frames, c->txlens, n, c->callsign, noise, c->txaudio, c->txcap);
         for (size_t i = 0; i < k; i++) c->txaudio[i] = (int16_t)((float)c->txaudio[i] * amp);
-    } else if (c->modem == HL_MODEM_MT63 && c->mtx) {
+    } else if (modem == HL_MODEM_MT63 && c->mtx) {
         k = mt63_encode_burst(c->mtx, frames, c->txlens, n, c->preamble_ms, amp, c->txaudio, c->txcap);
-    } else if (is_psk(c->modem)) {
-        k = psk_encode_burst(frames, c->txlens, n, c->preamble_ms, psk_mode(c->modem), amp, c->txaudio, c->txcap);
+    } else if (is_psk(modem)) {
+        k = psk_encode_burst(frames, c->txlens, n, c->preamble_ms, psk_mode(modem), amp, c->txaudio, c->txcap);
     } else {
         k = modem_encode_burst_fec(frames, c->txlens, n, c->preamble_ms, 2, amp, c->fec, c->txaudio, c->txcap);
     }
@@ -425,6 +462,27 @@ int HL_CALL hl_set_modem(hl_ctx *c, int modem) {
     return 0;
 }
 
+void HL_CALL hl_set_listen_all(hl_ctx *c, int on) {
+    if (on) {
+        if (!c->orx) c->orx = ofdm_rx_create();
+        if (!c->mrx) c->mrx = mt63_rx_create();
+        if (!c->prx) c->prx = psk_rx_create();
+    }
+    c->listen_all = on ? 1 : 0;
+}
+
+void HL_CALL hl_set_monitor(hl_ctx *c, int on) {
+    c->monitor = on ? 1 : 0;
+    mesh_set_monitor(c->mesh, c->monitor, cb_monitor, c);
+}
+
+void HL_CALL hl_set_monitor_callback(hl_ctx *c, hl_monitor_cb cb, void *user) {
+    c->on_mon = cb;
+    c->mon_user = user;
+}
+
+int HL_CALL hl_rx_modem(hl_ctx *c) { return c->rx_modem; }
+
 void HL_CALL hl_set_link(hl_ctx *c, int link, int tnc_baud) {
     c->link = link == HL_LINK_TNC ? HL_LINK_TNC : HL_LINK_AUDIO;
     if (c->link == HL_LINK_TNC) {
@@ -449,7 +507,9 @@ static void on_kiss(void *user, uint8_t port, uint8_t command, const uint8_t *da
     const uint8_t *info;
     size_t ilen;
     if (!ax25_ui_unwrap(data, len, &info, &ilen, NULL)) return; /* other APRS/packet traffic */
+    c->rx_modem = HL_MODEM_AFSK; /* a TNC radio only does AFSK; relays go back through the TNC regardless */
     mesh_rx_frame(c->mesh, info, ilen, (uint64_t)c->tnc_now);
+    c->rx_modem = -1;
 }
 
 void HL_CALL hl_tnc_rx(hl_ctx *c, const uint8_t *bytes, int n, int64_t now_ms) {

@@ -5,7 +5,7 @@ import ctypes as C
 import os
 import sys
 
-API_VERSION = 10
+API_VERSION = 11
 MODEMS = {"afsk": 0, "ofdm": 1, "mt63": 2, "psk2400": 3, "psk3600": 4}
 LINK_AUDIO, LINK_TNC = 0, 1
 CARRIER_SENSE = {"off": 0, "data": 1, "data_or_level": 2}

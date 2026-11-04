@@ -70,6 +70,17 @@ int mesh_send(mesh_t *m, const char *dst, int type, const uint8_t *data, size_t 
  * frames recovered by bit repair, where a false CRC match is possible though rare. 1 = plausible. */
 int mesh_frame_plausible(const uint8_t *frame, size_t len);
 void mesh_rx_frame(mesh_t *m, const uint8_t *frame, size_t len, uint64_t now_ms);
+/* The modem the next frames handed to mesh_rx_frame arrived on (the caller's numbering; -1 = the station's own). Frames
+ * relayed from them are re-sent on that modem: mesh_poll_tx_modem reports it per burst. */
+void mesh_set_rx_modem(mesh_t *m, int modem);
+
+/* Monitor mode: messages between other stations are reassembled (in their own slots, so they can never push out a
+ * message addressed to us) and reported through cb, never acknowledged. cb also receives overheard ACKs (type MT_ACK,
+ * msgid = the message acknowledged, data = the 4-byte fragment mask) and station IDs (type MT_ID, dst "CQ"). Relaying
+ * is unaffected. */
+typedef void (*mesh_monitor_cb)(void *user, const char *src, const char *dst, int type, uint16_t msgid,
+                                const uint8_t *data, size_t len);
+void mesh_set_monitor(mesh_t *m, int on, mesh_monitor_cb cb, void *user);
 void mesh_set_channel_busy(mesh_t *m, int busy, uint64_t now_ms);
 void mesh_tick(mesh_t *m, uint64_t now_ms);
 
@@ -78,6 +89,10 @@ void mesh_tick(mesh_t *m, uint64_t now_ms);
  * The caller should key PTT, transmit the burst, and unkey. */
 int mesh_poll_tx(mesh_t *m, uint64_t now_ms, uint8_t *buf, size_t cap, size_t *lens,
                  int max_frames);
+/* The same; a burst only holds frames for one modem, reported in *modem_out (-1 = the station's own modem; otherwise
+ * the modem relayed frames arrived on, see mesh_set_rx_modem). */
+int mesh_poll_tx_modem(mesh_t *m, uint64_t now_ms, uint8_t *buf, size_t cap, size_t *lens, int max_frames,
+                       int *modem_out);
 
 /* Next time (ms) the caller should call mesh_tick/mesh_poll_tx again; 0 = idle. */
 uint64_t mesh_next_wakeup(const mesh_t *m);

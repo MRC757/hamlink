@@ -250,7 +250,7 @@ struct psk_rx {
     size_t nbits;
     /* output */
     uint8_t q[RXQ][PSK_MAX_FRAME];
-    int qlen[RXQ], qh, qt;
+    int qlen[RXQ], qmode[RXQ], qh, qt;
     uint32_t ok, fixed, lost, syncs;
 };
 
@@ -267,8 +267,11 @@ void psk_rx_destroy(psk_rx_t *r) { free(r); }
 int psk_rx_busy(const psk_rx_t *r) { return r && r->state != HUNT; }
 void psk_rx_stats(const psk_rx_t *r, uint32_t *out4) { out4[0] = r->ok; out4[1] = r->fixed; out4[2] = r->lost; out4[3] = r->syncs; }
 
-int psk_rx_next(psk_rx_t *r, uint8_t *frame, size_t cap) {
+int psk_rx_next(psk_rx_t *r, uint8_t *frame, size_t cap) { return psk_rx_next_mode(r, frame, cap, NULL); }
+
+int psk_rx_next_mode(psk_rx_t *r, uint8_t *frame, size_t cap, int *mode) {
     if (r->qt == r->qh) return 0;
+    if (mode) *mode = r->qmode[r->qt];
     int len = r->qlen[r->qt];
     if ((size_t)len > cap) len = (int)cap;
     memcpy(frame, r->q[r->qt], (size_t)len);
@@ -404,6 +407,7 @@ static void finish_frame(psk_rx_t *r) {
     if (ok && next != r->qt) {
         memcpy(r->q[r->qh], blk + 1, (size_t)r->len);
         r->qlen[r->qh] = r->len;
+        r->qmode[r->qh] = r->mode;
         r->qh = next;
         r->ok++;
         r->fixed += (uint32_t)fx;

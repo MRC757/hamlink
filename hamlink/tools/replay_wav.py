@@ -22,7 +22,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from score_tnc_cd import DEFAULT_DLL, channels_48k  # noqa: E402
 
-API_VERSION = 10
+API_VERSION = 11
 MODEMS = {"afsk": 0, "ofdm": 1, "mt63": 2, "psk2400": 3, "psk3600": 4}
 TYPES = {1: "text", 2: "voice", 5: "report"}
 CHUNK = 960  # 20 ms at 48 kHz, as the app feeds it

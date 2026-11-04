@@ -1,8 +1,12 @@
 # Stations page and monitor mode: plan
 
-Status (2026-11-04): **steps 1-4 done** in both apps: the message history, the Stations page, unread counts, search,
-"Show on map", and a "Messages" button on map markers. Both apps build; not yet tried on a phone or on the air. Next:
-step 5, monitor mode in the core.
+Status (2026-11-04):
+* **Steps 1-4 done** in both apps: the message history, the Stations page, unread counts, search, "Show on map",
+  and a "Messages" button on map markers. Both apps build; not yet tried on a phone or on the air.
+* **Step 5 done** in the core (API 11): monitor mode, listen on all modems, and relays re-sending on the modem a frame
+  arrived on. Tests: `tests/test_monitor.py`. Measured on the Windows PC, every receiver at once uses 1.7% of one core
+  and decoded 10/10 test messages across all five modems.
+* **Next:** step 6, the settings and display in the apps and the Pi.
 
 A third page in the Windows and Android apps, beside **Messages** and **Map**, that shows traffic one station at a time.
 With **monitor mode** on, it also shows messages between *other* stations that this station overheard.
@@ -181,9 +185,9 @@ which is useful for a relay, for monitoring, and when other stations have not ag
 * **Carrier sense:** while listening to all modems, "channel busy" includes every running receiver: AFSK carrier
   detect, MT63 lock, PSK busy, and an OFDM busy signal. The OFDM signal is new; it is on from sync detection to the
   end of the packet. Today only the selected modem's detector counts, and OFDM's never does.
-* **Relaying:** a relay that listens to all modems re-sends what it hears **on its own selected modem**, not the one
-  it arrived on. That is the simplest rule, but it converts traffic. This needs a decision before step 6; the
-  alternative, re-sending on the modem it arrived on, needs the frame to carry its modem through the queue.
+* **Relaying (decided):** a relay re-sends each frame **on the modem it arrived on**, so every conversation stays on
+  its own modem. Each queued relay frame carries its modem, and a burst only ever holds frames for one modem. This
+  also applies without the setting: an AFSK frame heard by a station set to another modem is relayed as AFSK.
 
 ### What it does not do: replies on another modem
 

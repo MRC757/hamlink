@@ -53,6 +53,8 @@ size_t ofdm_encode_burst(ofdm_tx_t *t, const uint8_t *const *frames, const size_
 int ofdm_unpack(const uint8_t *payload, int len, const uint8_t **frames, size_t *lens, int max);
 
 uint32_t ofdm_rx_packets_ok(const ofdm_rx_t *r);
+/* 1 while a packet is being received: from its sync until it decodes or fails. For carrier sense. */
+int ofdm_rx_busy(const ofdm_rx_t *r);
 uint32_t ofdm_rx_packets_failed(const ofdm_rx_t *r);
 
 #ifdef __cplusplus

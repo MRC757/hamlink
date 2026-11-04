@@ -33,7 +33,11 @@ struct ofdm_rx {
     } q[OFDM_RX_QUEUE];
     int head = 0, tail = 0;
     uint32_t ok = 0, failed = 0;
+    long busy_left = 0; // samples: a packet is being received (from sync until done or failed, at most kBusyMax)
 };
+
+// Longest OFDM packet is about 1.8 s; if the decoder never reports the end, busy still clears.
+static const long kBusyMax = 3 * 48000;
 
 extern "C" {
 
@@ -173,8 +177,11 @@ void ofdm_rx_process(ofdm_rx_t *r, const int16_t *pcm, size_t n) {
     // The decoder wants at most one symbol period per feed(); process() once per completed period.
     while (n > 0) {
         size_t k = n < (size_t)OFDM_SYMBOL_SAMPLES ? n : (size_t)OFDM_SYMBOL_SAMPLES;
+        r->busy_left = r->busy_left > (long)k ? r->busy_left - (long)k : 0;
         if (r->dec.feed(pcm, (int)k, 0)) {
             int st = r->dec.process();
+            if (st == STATUS_SYNC) r->busy_left = kBusyMax;
+            else if (st == STATUS_FAIL || st == STATUS_NOPE || st == STATUS_PING || st == STATUS_DONE) r->busy_left = 0;
             if (st == STATUS_DONE) {
                 float cfo; int32_t mode; uint8_t call[10];
                 r->dec.staged(&cfo, &mode, call);
@@ -198,6 +205,7 @@ int ofdm_rx_next(ofdm_rx_t *r, uint8_t payload[OFDM_MAX_PAYLOAD], char callsign[
 }
 
 uint32_t ofdm_rx_packets_ok(const ofdm_rx_t *r) { return r->ok; }
+int ofdm_rx_busy(const ofdm_rx_t *r) { return r && r->busy_left > 0; }
 uint32_t ofdm_rx_packets_failed(const ofdm_rx_t *r) { return r->failed; }
 
 } // extern "C"

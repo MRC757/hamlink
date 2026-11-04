@@ -33,6 +33,8 @@ void psk_rx_destroy(psk_rx_t *r);
 void psk_rx_process(psk_rx_t *r, const int16_t *pcm, size_t n);
 /* Pops one received frame (RS corrected, CRC checked). Returns its length, 0 if none. */
 int psk_rx_next(psk_rx_t *r, uint8_t *frame, size_t cap);
+/* The same, and *mode = PSK_QPSK or PSK_8PSK: the mode the frame was sent in (one receiver decodes both). */
+int psk_rx_next_mode(psk_rx_t *r, uint8_t *frame, size_t cap, int *mode);
 /* 1 while a frame is being received (after its sync word): use as data carrier detect. */
 int psk_rx_busy(const psk_rx_t *r);
 /* {frames delivered, bytes the RS decoder corrected, frames lost after sync (header, RS or CRC failed), sync words seen} */

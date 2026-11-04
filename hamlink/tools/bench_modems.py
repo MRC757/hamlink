@@ -56,17 +56,21 @@ def load(path):
     L.hl_poll_tx.argtypes = [C.c_void_p, C.c_int64, C.c_float, C.POINTER(C.c_int)]
     L.hl_process_audio.restype = C.c_float
     L.hl_process_audio.argtypes = [C.c_void_p, C.c_void_p, C.c_int, C.c_int64, C.c_float]
+    if L.hl_api_version() >= 11:
+        L.hl_set_listen_all.argtypes = [C.c_void_p, C.c_int]
     return L
 
 
 class Station:
-    def __init__(self, L, call, modem, seed):
+    def __init__(self, L, call, modem, seed, listen_all=False):
         self.L, self.got = L, []
         cbs = (MSG(lambda u, s, d, t, p, n: self.got.append(t)), ST(lambda *a: None), EV(lambda *a: None))
         KEEP.append(cbs)
         self.c = L.hl_create(call, 0, 1, 500, seed, *cbs, None)
         if L.hl_set_modem(self.c, modem) != 0:
             raise RuntimeError("could not start this modem")
+        if listen_all:
+            L.hl_set_listen_all(self.c, 1)
 
     def feed(self, pcm, now):
         """Feeds pcm in 20 ms chunks; returns (new time in ms, seconds of CPU spent)."""
@@ -85,9 +89,9 @@ def noise(rng, n, sigma=30.0):
     return np.clip(np.round(rng.normal(0, sigma, n)), -32768, 32767).astype(np.int16)
 
 
-def make_bursts(L, modem, count, rng):
+def make_bursts(L, modem, count, rng, call=b"BENCH"):
     """`count` transmissions of a 60-byte text message, and the CPU time spent building each one."""
-    tx = Station(L, b"BENCH", modem, 1)
+    tx = Station(L, call, modem, 1)
     now, bursts, enc = 1000, [], []
     for i in range(count):
         text = f"bench {i:03d} the quick brown fox jumps over the lazy dog 0123456789".encode()
@@ -134,6 +138,29 @@ def bench(L, name, modem, seconds, rng):
     return idle * 100, busy * 100, got, len(bursts), sum(enc) / air * 100, air / len(bursts)
 
 
+def bench_listen_all(L, seconds, rng):
+    """Every receiver at once (API v11 "listen on all modems"): noise, then traffic on every modem in turn."""
+    rx = Station(L, b"RELAY", MODEMS["afsk"], 2, listen_all=True)
+    _, cpu = rx.feed(noise(rng, seconds * FS), 1000)
+    idle = cpu / seconds
+    rx.close()
+    bursts = []
+    for name, modem in MODEMS.items():
+        b, _ = make_bursts(L, modem, 2, rng, call=f"BENCH{modem}".encode())  # distinct senders: not duplicates
+        bursts += b
+    parts = []
+    for b in bursts:
+        parts += [noise(rng, int(1.5 * FS)), np.clip(b.astype(np.int32) + noise(rng, len(b), 300), -32768, 32767)]
+    parts.append(noise(rng, 6 * FS))
+    stream = np.concatenate(parts).astype(np.int16)
+    rx = Station(L, b"RELAY", MODEMS["afsk"], 2, listen_all=True)
+    _, cpu = rx.feed(stream, 1000)
+    busy = cpu / (len(stream) / FS)
+    got = sum(1 for t in rx.got if t == 1)
+    rx.close()
+    return idle * 100, busy * 100, got, len(bursts)
+
+
 def cpu_name():
     try:
         with open("/proc/cpuinfo") as f:
@@ -161,6 +188,10 @@ def main():
     for name in (MODEMS if a.modem == "all" else [a.modem]):
         idle, busy, got, sent, enc, burst = bench(L, name, MODEMS[name], a.seconds, rng)
         print(f"{name:9s} {idle:7.1f}% {busy:10.1f}% {got:4d}/{sent:<4d} {enc:9.1f}% {burst:6.1f}s", flush=True)
+    if a.modem == "all" and L.hl_api_version() >= 11:
+        idle, busy, got, sent = bench_listen_all(L, a.seconds, rng)
+        print(f"{'ALL RX':9s} {idle:7.1f}% {busy:10.1f}% {got:4d}/{sent:<4d}   (listen on all modems: every receiver"
+              " at once, traffic on each modem)", flush=True)
 
 
 if __name__ == "__main__":

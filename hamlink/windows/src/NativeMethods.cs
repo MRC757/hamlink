@@ -6,7 +6,7 @@ namespace HamLink;
 /// <summary>P/Invoke surface of hamlink_core.dll (core/hamlink_api.h). API version 10.</summary>
 internal static class NativeMethods
 {
-    public const int ApiVersion = 10;
+    public const int ApiVersion = 11;
     const string Lib = "hamlink_core";
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

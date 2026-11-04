@@ -17,6 +17,7 @@
 #define Q_SIZE 96
 #define MAX_TXMSG 4
 #define MAX_RXMSG 8
+#define MAX_MONMSG 8 /* monitor mode: messages between other stations, kept apart from ours */
 #define DEDUP_SIZE 256
 #define DEDUP_TTL_MS 300000ULL
 #define RXSLOT_TTL_MS 300000ULL
@@ -30,6 +31,7 @@ typedef struct {
     int used;
     uint8_t kind;
     int8_t txm;
+    int8_t modem; /* relayed frames: the modem they arrived on (-1 = the station's own, as for everything we originate) */
     uint32_t key, seqno;
     uint64_t due;
     uint8_t len;
@@ -75,6 +77,11 @@ struct mesh {
     qent_t q[Q_SIZE];
     txmsg_t txm[MAX_TXMSG];
     rxslot_t rx[MAX_RXMSG];
+    rxslot_t mon[MAX_MONMSG]; /* monitor mode reassembly (buffers allocated when monitor mode is first turned on) */
+    int monitor;
+    mesh_monitor_cb on_monitor;
+    void *monitor_user;
+    int rx_modem; /* modem of the frame being handled (mesh_set_rx_modem), copied into relayed frames */
     dedup_t dd[DEDUP_SIZE];
     int dd_pos;
     int busy;
@@ -193,13 +200,27 @@ mesh_t *mesh_create(const mesh_cfg_t *cfg, const mesh_cb_t *cb, void *user, uint
     m->next_id = (uint16_t)(rnd(m) & 0xFFFF);
     for (int i = 0; i < MAX_TXMSG; i++) m->txm[i].data = (uint8_t *)malloc(MESH_MAX_MSG);
     for (int i = 0; i < MAX_RXMSG; i++) m->rx[i].data = (uint8_t *)malloc(MESH_MAX_MSG);
+    m->rx_modem = -1;
     return m;
 }
+
+void mesh_set_monitor(mesh_t *m, int on, mesh_monitor_cb cb, void *user) {
+    if (on) {
+        for (int i = 0; i < MAX_MONMSG; i++)
+            if (!m->mon[i].data && !(m->mon[i].data = (uint8_t *)malloc(MESH_MAX_MSG))) return; /* stays off */
+    }
+    m->monitor = on ? 1 : 0;
+    m->on_monitor = cb;
+    m->monitor_user = user;
+}
+
+void mesh_set_rx_modem(mesh_t *m, int modem) { m->rx_modem = modem; }
 
 void mesh_destroy(mesh_t *m) {
     if (!m) return;
     for (int i = 0; i < MAX_TXMSG; i++) free(m->txm[i].data);
     for (int i = 0; i < MAX_RXMSG; i++) free(m->rx[i].data);
+    for (int i = 0; i < MAX_MONMSG; i++) free(m->mon[i].data);
     free(m);
 }
 
@@ -255,6 +276,7 @@ static qent_t *q_alloc(mesh_t *m) {
             m->q[i].used = 1;
             m->q[i].seqno = ++m->enq_counter;
             m->q[i].txm = -1;
+            m->q[i].modem = -1;
             return &m->q[i];
         }
     return NULL;
@@ -376,10 +398,12 @@ static void handle_ack(mesh_t *m, const uint8_t *f, size_t len, uint64_t now) {
     }
 }
 
-static rxslot_t *rx_slot_for(mesh_t *m, const uint8_t *src, uint16_t id, uint64_t now) {
+static rxslot_t *rx_slot_for(mesh_t *m, const uint8_t *src, uint16_t id, uint64_t now, int monitored) {
     rxslot_t *free_s = NULL, *oldest = NULL;
-    for (int i = 0; i < MAX_RXMSG; i++) {
-        rxslot_t *s = &m->rx[i];
+    rxslot_t *pool = monitored ? m->mon : m->rx;
+    int n = monitored ? MAX_MONMSG : MAX_RXMSG;
+    for (int i = 0; i < n; i++) {
+        rxslot_t *s = &pool[i];
         if (s->used && now - s->last_rx > RXSLOT_TTL_MS) s->used = 0;
         if (s->used && s->id == id && !memcmp(s->src, src, MESH_CALL_LEN)) return s;
         if (!s->used && !free_s) free_s = s;
@@ -401,7 +425,9 @@ static void send_ack(mesh_t *m, rxslot_t *s, uint64_t now) {
     e->key = frame_key(e->data, e->len);
 }
 
-static void handle_data(mesh_t *m, const uint8_t *f, size_t len, int to_me, uint64_t now) {
+/* monitored: a message between two other stations (monitor mode): reassembled in its own pool, never acknowledged,
+ * reported through the monitor callback instead of on_message. */
+static void handle_data(mesh_t *m, const uint8_t *f, size_t len, int to_me, int monitored, uint64_t now) {
     uint8_t type = f[0], seq = f[21], total = f[22];
     uint8_t fclass = (uint8_t)((f[1] & F_CLASS_MASK) >> F_CLASS_SHIFT);
     size_t fsz = (size_t)mesh_frag_size(fclass);
@@ -412,7 +438,7 @@ static void handle_data(mesh_t *m, const uint8_t *f, size_t len, int to_me, uint
     if (plen == 0 || plen > fsz) return;
     if (seq != total - 1 && plen != fsz) return;
 
-    rxslot_t *s = rx_slot_for(m, f + 3, id, now);
+    rxslot_t *s = rx_slot_for(m, f + 3, id, now, monitored);
     if (!s) return;
     /* A slot taken over from another message (all slots in use: the oldest is reused) must start clean, or the new
      * message inherits "delivered" and its fragment mask and is silently dropped (while still being ACKed). */
@@ -454,7 +480,14 @@ static void handle_data(mesh_t *m, const uint8_t *f, size_t len, int to_me, uint
 
     if (complete && !s->delivered) {
         s->delivered = 1;
-        if (m->cb.on_message) {
+        if (monitored) {
+            if (m->on_monitor) {
+                char sc[MESH_CALL_LEN + 1], dc[MESH_CALL_LEN + 1];
+                unpack_call(sc, s->src);
+                unpack_call(dc, s->dst);
+                m->on_monitor(m->monitor_user, sc, dc, type, id, s->data, (size_t)(total - 1) * fsz + s->last_len);
+            }
+        } else if (m->cb.on_message) {
             char sc[MESH_CALL_LEN + 1], dc[MESH_CALL_LEN + 1];
             unpack_call(sc, s->src);
             unpack_call(dc, s->dst);
@@ -516,12 +549,22 @@ void mesh_rx_frame(mesh_t *m, const uint8_t *f, size_t len, uint64_t now) {
         char sc[MESH_CALL_LEN + 1];
         unpack_call(sc, f + 3);
         event2(m, "HEARD %s%s", sc, "");
+        if (m->monitor && m->on_monitor) m->on_monitor(m->monitor_user, sc, "CQ", MT_ID, 0, f + MESH_HDR_LEN, len - MESH_HDR_LEN);
         return;
     }
     if (type == MT_ACK) {
         if (to_me) handle_ack(m, f, len, now);
+        else if (m->monitor && m->on_monitor) { /* someone acknowledging a message between two other stations */
+            char sc[MESH_CALL_LEN + 1], dc[MESH_CALL_LEN + 1];
+            unpack_call(sc, f + 3);
+            unpack_call(dc, f + 11);
+            m->on_monitor(m->monitor_user, sc, dc, MT_ACK, (uint16_t)(f[19] | (f[20] << 8)), f + MESH_HDR_LEN,
+                          len - MESH_HDR_LEN);
+        }
     } else if (to_me || bcast) {
-        handle_data(m, f, len, to_me, now);
+        handle_data(m, f, len, to_me, 0, now);
+    } else if (m->monitor) {
+        handle_data(m, f, len, 0, 1, now);
     }
 
     if (m->cfg.relay_enabled && f[2] > 0 && !to_me) {
@@ -532,6 +575,7 @@ void mesh_rx_frame(mesh_t *m, const uint8_t *f, size_t len, uint64_t now) {
             e->data[2] = (uint8_t)(f[2] - 1);
             e->kind = K_RELAY;
             e->key = key;
+            e->modem = (int8_t)m->rx_modem; /* re-sent on the modem it arrived on */
             /* Keep a burst together and in order: one random delay per batch, not per frame. */
             if (m->relay_batch_t == 0 || now - m->relay_batch_t > 2500)
                 m->relay_batch_due = now + 120 + rnd(m) % 700;
@@ -604,7 +648,13 @@ static int cmp_eligible(const mesh_t *m, int a, int b) {
 }
 
 int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens, int max_frames) {
+    return mesh_poll_tx_modem(m, now, buf, cap, lens, max_frames, NULL);
+}
+
+int mesh_poll_tx_modem(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens, int max_frames, int *modem_out) {
+    if (modem_out) *modem_out = -1;
     if (m->busy || now < m->holdoff_until) return 0;
+    int modem = -2; /* -2 = not chosen yet: the first frame picked sets the burst's modem; one burst, one modem */
     int pick[Q_SIZE], np = 0;
     uint32_t total_ms = m->cfg.preamble_ms + m->burst_extra_ms;
     uint32_t cap_ms = m->burst_cap_ms ? m->burst_cap_ms : m->cfg.burst_cap_ms;
@@ -622,15 +672,18 @@ int mesh_poll_tx(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t *lens
         }
         for (int c = 0; c < nc; c++) {
             qent_t *e = &m->q[cand[c]];
+            if (modem != -2 && e->modem != modem) continue; /* another modem: a later burst */
             uint32_t ms = frame_air(m, e->len);
             if (np >= max_frames || bytes + e->len > cap ||
                 (np > 0 && total_ms + ms > cap_ms)) { full = 1; break; }
             pick[np++] = cand[c];
+            modem = e->modem;
             total_ms += ms;
             bytes += e->len;
         }
     }
     if (np == 0) return 0;
+    if (modem_out) *modem_out = modem;
 
     size_t off = 0;
     int sent_non_id = 0, sent_id = 0;
