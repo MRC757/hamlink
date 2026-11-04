@@ -35,7 +35,14 @@ mode: leave a phone + radio on a hilltop and stations that can't hear each other
   to 8/16/32 damaged bytes per frame, and stations without FX.25 still read frames that arrive intact. In simulated noise
   at 5-6 dB SNR it raised delivery from 8-64% to 75-99% with 16 check bytes, at about 25% more airtime per data frame.
 * Selective-repeat ARQ, flood relay with duplicate suppression, CSMA, automatic station ID.
-  Format: `docs/PROTOCOL.md`.
+  Format: `docs/PROTOCOL.md`. A relay re-sends each message **on the modem it arrived on**.
+* **Stations page** (Windows and Android): messages one station at a time, with SITREP colour, last heard, distance
+  and direction, unread counts, search, "Show on map", and a separate entry for messages sent to CQ. Messages are
+  kept for 5 days (`messages.jsonl`) and can be cleared in Settings. Plan and design: `docs/STATIONS_PAGE.md`.
+* **Monitor all traffic** (off by default): also shows messages between other stations, in grey, with their delivery
+  status once the recipient's ACK is heard; never acknowledges or transmits.
+* **Listen on all modems** (off by default): every modem's receiver runs at once (about 2% of one core on a PC or an
+  ARM64 server); messages from another modem are marked "via ...". Replies still go out on the selected modem.
 * Voice is **store-and-forward clips** (Codec2 700C, 100 B/s), not live voice: 1200 bps can't carry
   real-time voice once framing/ARQ overhead is added. A 5 s clip is ~500 bytes, about 5.5 s of airtime direct,
   about 12 s round trip through one relay.
@@ -79,6 +86,8 @@ Bluetooth radio.
 * **Audio:** a USB audio interface (DigiRig) or the phone/PC's own speaker and microphone (acoustic coupling).
 * **Carrier sense:** *Data or loud audio* (default), *Data only* (ignores room noise and voice; for acoustic tests), or *Off*.
 * **Bit repair** of received frames (default on), PTT lead-in, TX level, relay mode and hop limit.
+* **Monitor all traffic** and **Listen on all modems**: both off by default.
+* **Message history**: kept 5 days; *Clear message history*.
 * **Map:** position source, beacon interval, report repeats, tile server, an offline map file. **Appearance** (Android):
   light, dark or the phone's setting. **Record received radio audio** (Windows) to WAV files for troubleshooting.
 

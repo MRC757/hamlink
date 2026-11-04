@@ -7,7 +7,45 @@ HamLink sends text, voice clips, positions and reports over FM radios. This help
 1. **Settings**: enter your callsign, choose the radio link (audio or Bluetooth TNC), the PTT method and the modem.
 2. Press **Start**. The badge shows LISTENING when the radio is running.
 3. Type a message (To: CQ for everyone) and press **Send text**.
-4. **Every station on a channel must use the same modem.** A station on a different modem hears nothing at all.
+4. **Every station on a channel must use the same modem.** A station on a different modem hears nothing at all,
+   unless it has **Listen on all modems** turned on (see *Monitor and listen on all modems* below).
+
+## Stations page
+
+**Stations** (beside Messages and Map) shows your traffic one station at a time.
+
+- **The list**: every station you have messaged, heard from, or seen on the map, most recent first. Each row shows its
+  SITREP colour (as on the map), when it was last heard, its distance and direction from you if it has sent a
+  position, and a red count of unread messages. The page button shows the total, for example "Stations (3)".
+- **All stations (CQ)**, at the top, holds the messages you sent to everyone. A CQ message someone else sent is listed
+  under that station.
+- **Find a callsign** filters the list.
+- **A conversation**: open a station to see everything to and from it in time order: text, voice clips (Play works
+  with the radio stopped too), reports and positions. Your messages show their status: queued, sent, delivered or
+  FAILED. The message box under the page is addressed to that station.
+- **Show on map** (Windows) or **Map** (Android) opens the map on that station. The other way round, select a station
+  on the map and press **Messages**.
+- **History**: messages are kept for **5 days**, also after the app is closed. **Clear message history** in Settings
+  deletes them.
+- Android: **Back** returns from a conversation to the list.
+
+## Monitor and listen on all modems
+
+Two settings, both **off** by default.
+
+- **Monitor all traffic (show messages between other stations)**: HamLink also shows messages that other stations
+  send to each other, in grey ("≈ W1AAA → W2BBB"), on the Messages page and on both stations' Stations pages. When
+  the recipient's acknowledgement is heard, the message is marked "delivered (ACK from ...)". Monitoring only
+  listens: it never acknowledges or transmits anything, and relaying works as before. **Show overheard** on the
+  Stations page hides these messages again. Overheard positions and SITREPs also go on the map.
+- **Listen on all modems (hear stations on any modem; replies still go out on yours)**: HamLink decodes every modem
+  at once, whatever modem is selected. A message that arrived on another modem is marked "via PSK 2400" (or
+  whichever modem). **Your replies and acknowledgements still go out on your selected modem**, so a station on
+  another modem only hears them if it also listens on all modems. Otherwise its app reports your message as
+  FAILED (no ACK) even though it arrived. Use it to monitor a channel, on a relay, or while stations sort out which
+  modem to use.
+- **Relays and modems**: a relay always re-sends a message **on the modem it arrived on**, so each conversation stays
+  on its own modem. With *Listen on all modems* on, one relay can serve stations on different modems.
 
 ## Equipment for each modem
 
@@ -108,6 +146,14 @@ The usual cause is something in the receive audio path changing the signal. Chec
 - Set the transmit level with **Test / Calibrate**; too much audio overdrives the radio.
 - If the radio keys late and cuts off the start, raise **PTT lead-in** in Settings.
 - Make sure the radio is actually transmitting (its TX light) and both radios are on the same frequency.
+
+### Overheard messages or other modems do not show
+
+- **Monitor all traffic** and **Listen on all modems** are off by default: turn them on in Settings. They apply the
+  next time the radio starts (Android restarts it when you save).
+- On the Stations page, check that **Show overheard** is ticked.
+- Monitoring only shows messages that arrive complete. A long message with one part missing is not shown, because it
+  is never re-sent to you.
 
 ### Relay does not relay
 

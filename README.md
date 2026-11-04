@@ -63,7 +63,11 @@ GPS coordinates are blurred in these screenshots.
   from USGS topo maps or your own tile server.
 * **Station SITREP:** an eight-field status report (conditions, home/mobile/portable, then power, water, sanitation,
   medical, grid communications and transportation, which may be omitted when all is OK).
-* **Built-in Help** on both apps: equipment for each modem, offline maps, troubleshooting.
+* **Stations page:** messages one station at a time, with the station's SITREP colour, last heard, distance and
+  direction, unread counts and a link to the map. Messages are kept for 5 days.
+* **Monitor all traffic** and **Listen on all modems** (both off by default): show messages between other stations,
+  and hear stations on any of the five modems. A relay re-sends each message on the modem it arrived on.
+* **Built-in Help** on both apps: equipment for each modem, the Stations page, offline maps, troubleshooting.
 * **Receiver tested on real packet audio:** on the WA8LMF TNC Test CD it decodes 971 error-free frames from the
   de-emphasised traffic track and 1001 from the flat one, with no false frames from an hour of noise.
 
