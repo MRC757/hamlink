@@ -11,11 +11,12 @@ AutoName: HamLink
 
 RepoType: git
 Repo: https://github.com/MRC757/hamlink.git
+Binaries: https://github.com/MRC757/hamlink/releases/download/v%v/HamLink-%v-android.apk
 
 Builds:
-  - versionName: 0.2.3
-    versionCode: 7
-    commit: v0.2.3
+  - versionName: 0.2.4
+    versionCode: 8
+    commit: afeb89f8a3e8764e5887b689d92274758f5dfed3
     subdir: hamlink/android/app
     gradle:
       - yes
@@ -23,7 +24,9 @@ Builds:
       - hamlink/windows/native
     ndk: 27.0.12077973
 
+AllowedAPKSigningKeys: 58435591f0999a47f867baf7c176246248d42ea298c7770264eb7be42534586d
+
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+$
-CurrentVersion: 0.2.3
-CurrentVersionCode: 7
+CurrentVersion: 0.2.4
+CurrentVersionCode: 8
