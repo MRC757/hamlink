@@ -1,0 +1,9 @@
+0.2.3
+- Stations page: messages one station at a time, kept for 5 days
+- Send SALUTE and SITREP reports to one station or to everyone
+- Optional: monitor traffic between other stations; listen on all modems
+- Optional: no separate station ID after your own messages
+- Manual PTT counts down the transmission
+- Ignores volume presses from USB cables while the radio runs
+- OFDM now decodes quiet signals
+- New app icon

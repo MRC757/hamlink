@@ -29,6 +29,7 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:label="HamLink"
+        android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity

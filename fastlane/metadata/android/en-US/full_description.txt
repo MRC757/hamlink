@@ -1,0 +1,28 @@
+HamLink sends text messages, voice clips, positions and situation reports over ordinary handheld VHF/UHF FM radios. The phone is the modem: connect it to the radio with an audio interface such as a DigiRig, use a radio with a built-in KISS TNC over Bluetooth, or, for a first test, simply hold the phone next to the radio.
+
+<b>For licensed radio amateurs.</b> You need a callsign, transmissions are not encrypted, and the protocol is publicly documented.
+
+<b>Modems</b>
+<ul>
+<li>AFSK 1200 with FX.25 error correction (the default; works with packet radio equipment)</li>
+<li>PSK 2400 and PSK 3600, about twice as fast</li>
+<li>OFDM (from the Rattlegram app)</li>
+<li>MT63-2000: slow, but gets through very weak and noisy signals, even by acoustic coupling</li>
+</ul>
+
+<b>Features</b>
+<ul>
+<li>Messages to one station (acknowledged and retried until delivered) or to everyone</li>
+<li>Store-and-forward voice clips (Codec2)</li>
+<li>Relay mode: a station on a hill passes traffic between stations that cannot hear each other</li>
+<li>Map with positions, SALUTE reports and station SITREPs, sent to everyone or to one station; offline map files (MBTiles)</li>
+<li>Stations page: conversations one station at a time, kept for 5 days</li>
+<li>Optional monitoring of traffic between other stations, and listening on all modems at once</li>
+<li>USB serial PTT (DigiRig), radio VOX, or manual PTT with on-screen countdowns</li>
+<li>Test and calibration tones with a receive level meter</li>
+<li>Built-in help: equipment for each modem, offline maps, troubleshooting</li>
+</ul>
+
+HamLink works without internet. It downloads map tiles only when you allow it, and has no ads, tracking or accounts.
+
+A Windows version and a Raspberry Pi relay service use the same core and talk to each other. Source, documentation and test results: https://github.com/MRC757/hamlink

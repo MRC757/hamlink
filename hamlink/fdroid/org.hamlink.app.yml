@@ -1,0 +1,33 @@
+# F-Droid build metadata for HamLink. Copy to metadata/org.hamlink.app.yml in a fork of
+# https://gitlab.com/fdroid/fdroiddata and open a merge request (steps: hamlink/docs/FDROID.md).
+# The store listing (descriptions, icon, screenshots, changelogs) is read from fastlane/ in this repository.
+Categories:
+  - Connectivity
+  - Science & Education
+License: GPL-3.0-or-later
+AuthorName: KJ4QEO
+SourceCode: https://github.com/MRC757/hamlink
+IssueTracker: https://github.com/MRC757/hamlink/issues
+Changelog: https://github.com/MRC757/hamlink/releases
+
+AutoName: HamLink
+
+RepoType: git
+Repo: https://github.com/MRC757/hamlink.git
+
+Builds:
+  - versionName: 0.2.3
+    versionCode: 7
+    commit: v0.2.3
+    subdir: hamlink/android/app
+    gradle:
+      - yes
+    ndk: 27.0.12077973
+    # the prebuilt Windows DLL is not used by the Android build (which compiles the core from source)
+    scandelete:
+      - hamlink/windows/native
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: 0.2.3
+CurrentVersionCode: 7
