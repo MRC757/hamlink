@@ -20,8 +20,6 @@ Builds:
     subdir: hamlink/android/app
     gradle:
       - yes
-    scandelete:
-      - hamlink/windows/native
     ndk: 27.0.12077973
 
 AllowedAPKSigningKeys: 58435591f0999a47f867baf7c176246248d42ea298c7770264eb7be42534586d
