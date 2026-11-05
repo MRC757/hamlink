@@ -88,6 +88,7 @@ struct mesh {
     uint64_t holdoff_until, last_tx_end, id_timer_start;
     uint64_t relay_batch_t, relay_batch_due; /* frames of one burst share a relay delay */
     int tx_since_id, id_queued;
+    int id_foreign_only; /* station ID switched off: identify only after transmissions without our callsign (relays) */
     uint16_t next_id;
     uint8_t ack_serial;
     int fec_nroots; /* frames go out as FX.25 with this many check bytes (0 = plain HDLC); airtime estimates follow */
@@ -215,6 +216,8 @@ void mesh_set_monitor(mesh_t *m, int on, mesh_monitor_cb cb, void *user) {
 }
 
 void mesh_set_rx_modem(mesh_t *m, int modem) { m->rx_modem = modem; }
+
+void mesh_set_station_id(mesh_t *m, int on) { m->id_foreign_only = on ? 0 : 1; }
 
 void mesh_destroy(mesh_t *m) {
     if (!m) return;
@@ -686,7 +689,7 @@ int mesh_poll_tx_modem(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t
     if (modem_out) *modem_out = modem;
 
     size_t off = 0;
-    int sent_non_id = 0, sent_id = 0;
+    int sent_non_id = 0, sent_id = 0, sent_foreign = 0;
     for (int k = 0; k < np; k++) {
         qent_t *e = &m->q[pick[k]];
         memcpy(buf + off, e->data, e->len);
@@ -694,6 +697,7 @@ int mesh_poll_tx_modem(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t
         off += e->len;
         m->st.tx_frames++;
         if (e->data[0] == MT_ID) sent_id = 1; else sent_non_id = 1;
+        if (e->data[0] != MT_ID && memcmp(e->data + 3, m->me, MESH_CALL_LEN)) sent_foreign = 1; /* a relayed frame */
         e->used = 0;
         if (e->kind == K_OWN && e->txm >= 0) {
             txmsg_t *t = &m->txm[e->txm];
@@ -726,7 +730,9 @@ int mesh_poll_tx_modem(mesh_t *m, uint64_t now, uint8_t *buf, size_t cap, size_t
         uint64_t w = now + total_ms + m->cfg.preamble_ms + m->burst_extra_ms + frame_air(m, MESH_HDR_LEN + 4) + 120 + 400;
         if (w > m->holdoff_until) m->holdoff_until = w;
     }
-    if (sent_non_id && !m->tx_since_id) {
+    /* Every frame we originate carries our callsign in its header. With the separate station ID switched off, only a
+     * transmission that did not (another station's frame we relayed) still leads to an ID. */
+    if ((m->id_foreign_only ? sent_foreign : sent_non_id) && !m->tx_since_id) {
         m->tx_since_id = 1;
         m->id_timer_start = now;
     }

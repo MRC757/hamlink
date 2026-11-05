@@ -156,3 +156,32 @@ def test_station_id_after_tnc_traffic():
             [(1.0, lambda t: A.hl_send(a.c, b"W2BBB", 1, b"ping", 4, 1, int(t * 1000)))])
     types = [f[1 + 16] for f in kiss_frames(a.wire_log)]    # mesh type byte after the AX.25 header
     assert 4 in types                                       # an ID frame went out once traffic stopped
+
+
+def _types(node):
+    return [f[1 + 16] for f in kiss_frames(node.wire_log)]
+
+
+def test_station_id_switch_off_sends_no_separate_id_after_own_traffic():
+    A.hl_set_station_id.argtypes = [C.c_void_p, C.c_int]
+    a, b = tnode("W1AAA", seed=1), tnode("W2BBB", seed=2)
+    A.hl_set_station_id(a.c, 0)
+    A.hl_set_station_id(b.c, 0)
+    run_tnc([a, b], {"W1AAA": ["W2BBB"], "W2BBB": ["W1AAA"]}, 700,      # past the 9-minute periodic ID too
+            [(1.0, lambda t: A.hl_send(a.c, b"W2BBB", 1, b"ping", 4, 1, int(t * 1000)))])
+    assert [m[3] for m in b.msgs] == [b"ping"]
+    assert 1 in _types(a) and 3 in _types(b)                # the message and its ACK went out...
+    assert 4 not in _types(a) and 4 not in _types(b)        # ...and no ID from either station
+
+
+def test_station_id_switch_off_still_identifies_after_relaying():
+    """A relay's transmission carries the original sender's callsign, not the relay's: it must still identify."""
+    A.hl_set_station_id.argtypes = [C.c_void_p, C.c_int]
+    a, r, b = tnode("W1AAA", seed=1), tnode("W9RLY", relay=1, seed=2), tnode("W2BBB", seed=3)
+    for n in (a, r, b):
+        A.hl_set_station_id(n.c, 0)
+    run_tnc([a, r, b], {"W1AAA": ["W9RLY"], "W9RLY": ["W1AAA", "W2BBB"], "W2BBB": ["W9RLY"]}, 60,
+            [(1.0, lambda t: A.hl_send(a.c, b"W2BBB", 1, b"via relay", 9, 1, int(t * 1000)))])
+    assert [m[3] for m in b.msgs] == [b"via relay"]
+    assert 4 in _types(r)                                   # the relay identified
+    assert 4 not in _types(a) and 4 not in _types(b)        # the end stations did not

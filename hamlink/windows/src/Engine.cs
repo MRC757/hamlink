@@ -308,6 +308,7 @@ internal sealed class Engine
         r.SetLink(tnc ? Radio.LinkTnc : Radio.LinkAudio, s.TncBaud);
         r.SetFec(s.AfskFec);
         r.SetMonitor(s.Monitor);
+        r.SetStationId(s.StationId);
         if (!tnc) r.SetListenAll(s.ListenAll);
         modemNow = tnc ? -1 : startModem;
         AfterStart(r);

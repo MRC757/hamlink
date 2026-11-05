@@ -89,6 +89,8 @@ Bluetooth radio.
 * **Carrier sense:** *Data or loud audio* (default), *Data only* (ignores room noise and voice; for acoustic tests), or *Off*.
 * **Bit repair** of received frames (default on), PTT lead-in, TX level, relay mode and hop limit.
 * **Monitor all traffic** and **Listen on all modems**: both off by default.
+* **Send station ID** (on by default): off sends no separate ID after the station's own traffic, which carries its
+  callsign in every frame; IDs still follow relayed traffic and test tones.
 * **Message history**: kept 5 days; *Clear message history*.
 * **Map:** position source, beacon interval, report repeats, tile server, an offline map file. **Appearance** (Android):
   light, dark or the phone's setting. **Record received radio audio** (Windows) to WAV files for troubleshooting.

@@ -55,6 +55,10 @@ class Settings(ctx: Context) {
     var listenAll: Boolean
         get() = sp.getBoolean("listenAll", false)
         set(v) = sp.edit().putBoolean("listenAll", v).apply()
+    /** Separate station ID frames (on by default); off leaves IDs only after relaying or a test tone. */
+    var stationId: Boolean
+        get() = sp.getBoolean("stationId", true)
+        set(v) = sp.edit().putBoolean("stationId", v).apply()
     var dest: String
         get() = sp.getString("dest", "CQ") ?: "CQ"
         set(v) = sp.edit().putString("dest", v.trim().uppercase()).apply()

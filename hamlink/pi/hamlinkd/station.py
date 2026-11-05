@@ -98,6 +98,7 @@ class Station:
                 raise RuntimeError(f"core refused modem {settings.modem}")
         self.core.set_fec(settings.afsk_fec)
         self.core.set_monitor(settings.monitor)
+        self.core.set_station_id(settings.station_id)
         if settings.link == "audio":
             self.core.set_listen_all(settings.listen_all)
         self.modem_now = hl.MODEMS.get(settings.modem, 0) if settings.link == "audio" else -1

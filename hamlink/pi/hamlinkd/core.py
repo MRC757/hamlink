@@ -70,6 +70,7 @@ def load(path):
         "hl_set_monitor_callback": (None, [C.c_void_p, MON_CB, C.c_void_p]),
         "hl_set_listen_all": (None, [C.c_void_p, C.c_int]),
         "hl_rx_modem": (C.c_int, [C.c_void_p]),
+        "hl_set_station_id": (None, [C.c_void_p, C.c_int]),
     }
     for name, (res, args) in sig.items():
         f = getattr(L, name)
@@ -103,6 +104,9 @@ class Core:
 
     def set_listen_all(self, on):
         self.L.hl_set_listen_all(self.c, 1 if on else 0)
+
+    def set_station_id(self, on):
+        self.L.hl_set_station_id(self.c, 1 if on else 0)
 
     def rx_modem(self):
         """Inside a message or monitor callback: the modem that decoded the frame (-1 elsewhere)."""

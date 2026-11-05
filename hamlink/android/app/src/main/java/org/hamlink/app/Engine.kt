@@ -350,6 +350,7 @@ class Engine(private val ctx: Context) : MeshListener {
         Native.setLink(if (tnc) Native.LINK_TNC else Native.LINK_AUDIO, settings.tncBaud)
         Native.setFec(settings.afskFec)
         Native.setMonitor(settings.monitor)
+        Native.setStationId(settings.stationId)
         if (!tnc) Native.setListenAll(settings.listenAll)
         modemNow = if (tnc) -1 else startModem
         Hub.ui { Hub.monitor = settings.monitor }

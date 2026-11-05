@@ -165,6 +165,12 @@ typedef void(HL_CALL *hl_monitor_cb)(void *user, const char *src, const char *ds
                                      const uint8_t *data, int len);
 HL_API void HL_CALL hl_set_monitor(hl_ctx *c, int on);
 HL_API void HL_CALL hl_set_monitor_callback(hl_ctx *c, hl_monitor_cb cb, void *user);
+
+/* (API v11) Separate station ID frames (default on). Off: none after this station's own messages, ACKs and reports,
+ * which carry its callsign in every frame header; an ID is still sent after relaying another station's frames and
+ * after a test tone, since those transmissions do not carry it. A station that only listens never transmits either
+ * way. Check that this meets your licence's identification rules. */
+HL_API void HL_CALL hl_set_station_id(hl_ctx *c, int on);
 /* Single-bit repair of AFSK frames that fail their CRC (default on). Only the 8 least certain bit decisions are tried,
  * a repair is accepted only when exactly one candidate passes, and repaired frames must pass a structural check. */
 HL_API void HL_CALL hl_set_bit_repair(hl_ctx *c, int on);

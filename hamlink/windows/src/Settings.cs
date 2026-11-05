@@ -32,6 +32,9 @@ internal sealed class Settings
     public bool Monitor { get; set; }
     /// <summary>Run every modem's receiver, whatever modem is selected (off by default).</summary>
     public bool ListenAll { get; set; }
+    /// <summary>Separate station ID frames after traffic and every 9 minutes (on by default). Every frame already
+    /// carries the callsign; off leaves IDs only after relaying or a test tone.</summary>
+    public bool StationId { get; set; } = true;
     /// <summary>Seconds between pressing Transmit and the audio starting, in MANUAL PTT mode.</summary>
     public int ManualCountdown { get; set; } = 3;
     /// <summary>Hold off transmitting while the receive audio is loud. Turn off for acoustic tests where room noise keeps it busy.</summary>

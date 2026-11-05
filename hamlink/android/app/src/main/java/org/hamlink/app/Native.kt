@@ -28,6 +28,8 @@ object Native {
     external fun setListenAll(on: Boolean)
     /** Inside onMessage / onMonitor: the modem that decoded the frame (-1 elsewhere). */
     external fun rxModem(): Int
+    /** Separate station ID frames (default on). Off: only after relaying or a test tone. */
+    external fun setStationId(on: Boolean)
     const val MT_ACK = 3
     const val MT_ID = 4
     fun modemShort(modem: Int) = when (modem) {

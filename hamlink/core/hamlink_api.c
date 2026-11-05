@@ -483,6 +483,8 @@ void HL_CALL hl_set_monitor_callback(hl_ctx *c, hl_monitor_cb cb, void *user) {
 
 int HL_CALL hl_rx_modem(hl_ctx *c) { return c->rx_modem; }
 
+void HL_CALL hl_set_station_id(hl_ctx *c, int on) { mesh_set_station_id(c->mesh, on); }
+
 void HL_CALL hl_set_link(hl_ctx *c, int link, int tnc_baud) {
     c->link = link == HL_LINK_TNC ? HL_LINK_TNC : HL_LINK_AUDIO;
     if (c->link == HL_LINK_TNC) {

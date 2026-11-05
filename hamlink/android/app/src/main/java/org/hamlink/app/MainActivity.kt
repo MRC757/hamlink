@@ -369,6 +369,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
     var auto by remember { mutableStateOf(s.autoPlayVoice) }
     var monitorOn by remember { mutableStateOf(s.monitor) }
     var listenAllOn by remember { mutableStateOf(s.listenAll) }
+    var stationIdOn by remember { mutableStateOf(s.stationId) }
     var manualSecs by remember { mutableStateOf(s.manualCountdown.toFloat()) }
     var sense by remember { mutableStateOf(s.carrierSenseMode) }
     var repair by remember { mutableStateOf(s.bitRepair) }
@@ -486,6 +487,10 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }); Box(Modifier.width(8.dp)); Text("Auto-play received voice") }
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(monitorOn, { monitorOn = it }); Box(Modifier.width(8.dp)); Text("Monitor all traffic (show messages between other stations)") }
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(listenAllOn, { listenAllOn = it }); Box(Modifier.width(8.dp)); Text("Listen on all modems") }
+                Row(verticalAlignment = Alignment.CenterVertically) { Switch(stationIdOn, { stationIdOn = it }); Box(Modifier.width(8.dp)); Text("Send station ID") }
+                if (!stationIdOn) Text("No separate ID after your own messages: every message carries your callsign. An ID is still " +
+                    "sent after relaying or a test tone. Check that this meets your licence's identification rules.",
+                    style = MaterialTheme.typography.bodySmall)
                 if (listenAllOn) Text("Hears stations on any modem. Replies and acknowledgements still go out on yours, so a station on " +
                     "another modem will not hear them unless it listens on all modems too.", style = MaterialTheme.typography.bodySmall)
                 var confirmClear by remember { mutableStateOf(false) }
@@ -505,7 +510,7 @@ private fun SettingsDialog(s: Settings, requestBt: () -> Unit, onDone: () -> Uni
             TextButton(onClick = {
                 s.callsign = call; s.ttl = ttl.toInt(); s.preambleMs = pre.toInt(); s.txLevel = tx
                 s.busyThreshold = busy; s.pttLine = line; s.useUsbAudio = usb; s.autoPlayVoice = auto
-                s.monitor = monitorOn; s.listenAll = listenAllOn; Hub.monitor = monitorOn
+                s.monitor = monitorOn; s.listenAll = listenAllOn; Hub.monitor = monitorOn; s.stationId = stationIdOn
                 s.manualCountdown = manualSecs.toInt(); s.carrierSenseMode = sense; s.bitRepair = repair
                 s.transport = transport; s.modem = modem; s.afskFec = fec; s.tncBaud = tncBaud; s.btAddress = btAddress; s.btName = btName
                 if (s.callsignValid()) onDone()

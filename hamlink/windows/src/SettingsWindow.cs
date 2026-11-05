@@ -43,6 +43,13 @@ internal sealed class SettingsWindow : Window
         Content = "Monitor all traffic (show messages between other stations)", Margin = new Thickness(0, 6, 0, 0),
         ToolTip = "Overheard messages are shown in grey and never acknowledged. Relaying is not affected.",
     };
+    readonly CheckBox stationId = new()
+    {
+        Content = "Send station ID (off: no separate ID after your own messages, which carry your callsign; still sent after relaying or a test tone)", Margin = new Thickness(0, 6, 0, 0),
+        ToolTip = "Every HamLink frame carries your callsign in its header. With this off, HamLink does not transmit a " +
+                  "separate ID frame after your own traffic (saves about 7 s per exchange on MT63). Check that this meets " +
+                  "your licence's identification rules.",
+    };
     readonly CheckBox listenAll = new()
     {
         Content = "Listen on all modems (hear stations on any modem; replies still go out on yours)", Margin = new Thickness(0, 6, 0, 0),
@@ -119,6 +126,7 @@ internal sealed class SettingsWindow : Window
         auto.IsChecked = s.AutoPlayVoice;
         monitor.IsChecked = s.Monitor;
         listenAll.IsChecked = s.ListenAll;
+        stationId.IsChecked = s.StationId;
         ttl.ValueChanged += (_, _) => UpdateLabels();
         pre.ValueChanged += (_, _) => UpdateLabels();
         tx.ValueChanged += (_, _) => UpdateLabels();
@@ -169,6 +177,7 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(auto);
         panel.Children.Add(monitor);
         panel.Children.Add(listenAll);
+        panel.Children.Add(stationId);
         var clearHistory = new Button
         {
             Content = "Clear message history", Padding = new Thickness(12, 3, 12, 3), Margin = new Thickness(0, 10, 0, 0),
@@ -300,6 +309,7 @@ internal sealed class SettingsWindow : Window
         s.AutoPlayVoice = auto.IsChecked == true;
         s.Monitor = monitor.IsChecked == true;
         s.ListenAll = listenAll.IsChecked == true;
+        s.StationId = stationId.IsChecked == true;
         DialogResult = true;
     }
 }

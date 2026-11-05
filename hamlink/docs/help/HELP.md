@@ -55,8 +55,21 @@ Two settings, both **off** by default.
   another modem only hears them if it also listens on all modems. Otherwise its app reports your message as
   FAILED (no ACK) even though it arrived. Use it to monitor a channel, on a relay, or while stations sort out which
   modem to use.
+- **Listening silently**: a station that only receives never transmits anything, with or without these settings.
 - **Relays and modems**: a relay always re-sends a message **on the modem it arrived on**, so each conversation stays
   on its own modem. With *Listen on all modems* on, one relay can serve stations on different modems.
+
+## Station ID
+
+By default HamLink sends a short **station ID** ("DE yourcall") once your traffic goes quiet, and at least every 9
+minutes while you keep transmitting. On MT63 each one takes about 7 seconds on the air.
+
+**Send station ID** in Settings turns these separate IDs off. Every HamLink message, acknowledgement and report
+already carries your callsign in its header, so your own transmissions still identify you. An ID is **still sent
+after relaying** another station's message, and after a **test tone**, because those transmissions do not carry
+your callsign. A station that only listens (for example with **Monitor all traffic**) never transmits at all.
+
+Check that this meets your licence's identification rules before you turn the IDs off.
 
 ## Equipment for each modem
 

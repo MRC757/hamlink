@@ -37,6 +37,9 @@ internal static class NativeMethods
     public static extern int hl_rx_modem(IntPtr ctx);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void hl_set_station_id(IntPtr ctx, int on);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern int hl_api_version();
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

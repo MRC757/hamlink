@@ -59,6 +59,8 @@ internal sealed class Radio : IDisposable
     public void SetListenAll(bool on) => NativeMethods.hl_set_listen_all(ctx, on ? 1 : 0);
     /// <summary>Inside a Message or Monitor handler: the modem that decoded the frame (-1 elsewhere).</summary>
     public int RxModem => NativeMethods.hl_rx_modem(ctx);
+    /// <summary>Separate station ID frames (default on). Off: only after relaying or a test tone.</summary>
+    public void SetStationId(bool on) => NativeMethods.hl_set_station_id(ctx, on ? 1 : 0);
     public const int TypeAck = 3, TypeId = 4;
 
     public void SetRelay(bool on) => NativeMethods.hl_set_relay(ctx, on ? 1 : 0);

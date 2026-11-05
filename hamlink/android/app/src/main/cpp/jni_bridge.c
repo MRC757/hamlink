@@ -95,6 +95,11 @@ JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setListenAll(JNIEnv *env, job
     if (G.ctx) hl_set_listen_all(G.ctx, on ? 1 : 0);
 }
 
+JNIEXPORT void JNICALL Java_org_hamlink_app_Native_setStationId(JNIEnv *env, jobject thiz, jboolean on) {
+    (void)env; (void)thiz;
+    if (G.ctx) hl_set_station_id(G.ctx, on ? 1 : 0);
+}
+
 JNIEXPORT jint JNICALL Java_org_hamlink_app_Native_rxModem(JNIEnv *env, jobject thiz) {
     (void)env; (void)thiz;
     return G.ctx ? hl_rx_modem(G.ctx) : -1;

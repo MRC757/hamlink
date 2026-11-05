@@ -81,6 +81,11 @@ void mesh_set_rx_modem(mesh_t *m, int modem);
 typedef void (*mesh_monitor_cb)(void *user, const char *src, const char *dst, int type, uint16_t msgid,
                                 const uint8_t *data, size_t len);
 void mesh_set_monitor(mesh_t *m, int on, mesh_monitor_cb cb, void *user);
+
+/* Station ID (default on): an ID frame after traffic goes quiet and at least every 9 minutes while transmitting. Off:
+ * no ID after our own frames, which carry our callsign in their header; one is still sent after relaying another
+ * station's frames and after an external transmission such as a test tone (mesh_note_external_tx). */
+void mesh_set_station_id(mesh_t *m, int on);
 void mesh_set_channel_busy(mesh_t *m, int busy, uint64_t now_ms);
 void mesh_tick(mesh_t *m, uint64_t now_ms);
 
