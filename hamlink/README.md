@@ -4,11 +4,13 @@ Text and voice-clip messaging over cheap handheld VHF/UHF FM radios (Baofeng UV-
 Android phone **or a Windows 11 PC** as the modem and a DigiRig for audio + PTT. Includes a simplex store-and-forward relay
 mode: leave a phone + radio on a hilltop and stations that can't hear each other talk through it.
 
-> **Review build 0.2.2 (2026-11-02).** Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on a Linux host.
-> The **Windows app runs on Windows 11** and the **Android app runs on a phone**; the two have exchanged messages, reports
-> and relayed traffic by acoustic coupling, and MT63 messages over **Baofeng radios** (phone to laptop). The radio test
-> used a noise-cancelling USB-C cable that only MT63 survives; AFSK, PSK and OFDM over radio still need testing with a
-> DigiRig or plain sound card.
+> **Released: review build 0.2.2 (2026-11-02). In testing: 0.2.3** (this repository; adds the Stations page, reports to
+> one station, monitor and listen-on-all-modems, the station ID switch, the manual PTT countdown, an OFDM fix for quiet
+> signals and the new logo). Licence: GPL-3.0-or-later (see *Licence* below). The C core is tested on Linux x86-64 and
+> ARM64 in CI. The **Windows app runs on Windows 11** and the **Android app runs on a phone**. The two have exchanged
+> messages, reports and relayed traffic by acoustic coupling, and MT63 and short AFSK messages over **Baofeng radios**.
+> The cable used so far has noise cancelling that damages other signals; PSK and OFDM over radio still need testing
+> with a DigiRig or plain sound card.
 > Downloads for both are on the [Releases](https://github.com/MRC757/hamlink/releases) page. Crashes and errors, with the
 > exact error text, are the most useful feedback at this stage.
 
@@ -236,8 +238,8 @@ TNC radio.
   the full table: `docs/RASPBERRY_PI.md`.
 
 ## Status: what was and wasn't verified
-Verified here (host build, 88 pytest tests plus a sanitizer-built C suite, all against the flat C API or the mesh layer through a simulated
-FM audio channel or a simulated byte link):
+Verified here (110 pytest tests in CI on Linux x86-64 and ARM64, plus a sanitizer-built C suite, all against the flat C
+API or the mesh layer through a simulated FM audio channel or a simulated byte link; the Pi relay service has 22 more):
 * AFSK: 100% of frames decode down to ~12 dB SNR in a 2.7 kHz band through a model with 300-3000 Hz
   band-limiting, 6 dB spectral tilt and +/-300 ppm clock error (~97% at 10 dB, ~55% at 8 dB).
 * OFDM: 100% of packets down to 8 dB SNR, 96-100% at 6 dB, 0% at 4 dB (same channel model); 4 back-to-back
@@ -316,9 +318,16 @@ see `third_party/aicodix/`). Rattlegram snapshot used: aicodix/rattlegram commit
 
 ## Known issues and open questions
 Things a reviewer may trip over, roughly in order of how likely they are to matter:
-1. **Radio interfaces.** Over Baofeng radios only MT63 has been proven, through a cable whose noise cancelling ruins the
-   other modems. AFSK, PSK and OFDM over radio, the DigiRig's serial PTT line and the Bluetooth TNC link are untested.
-   The untested parts of both apps are listed under *Status* above.
+1. **Radio interfaces.**
+   * **The BTECH APRS-K1 PRO cable** used so far is a VOX board (Maxton APRS-PROX) with a noise-cancelling USB-C
+     sound chip. The chip learns any steady sound within about 0.7 s and turns it down by about 20 dB, so it passes
+     MT63, and AFSK only for short messages (about 40 characters) with a 300 ms PTT lead-in. A longer lead-in makes
+     it worse.
+   * Wide band gave fewer bit errors than Narrow.
+   * Acoustic coupling: MT63 and OFDM decode; AFSK and PSK do not, because of the strong resonance in the
+     phone-to-radio path.
+   * **Untested:** PSK and OFDM over radio, the DigiRig's serial PTT line, and the Bluetooth TNC link. The untested
+     parts of both apps are listed under *Status* above.
 2. **Broadcast reports are not acknowledged.** On a lossy link a report can be lost without the sender knowing. Map setup >
    *Repeat my reports* (off by default) sends 1 or 2 extra copies about 30 s apart (plus random spread); receivers drop the
    copies. Each copy is a transmission.
@@ -334,7 +343,7 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
 8. **Receiver DSP.** Data carrier detect, single-bit repair, a two-speed clock loop, a 900-2500 Hz band-pass prefilter
    and two parallel slicers are in. On the WA8LMF TNC Test CD it decodes 971 error-free frames from the de-emphasised
    traffic track (608 before the prefilter and slicers) and 1001 from the flat one; details in `docs/DSP_IMPROVEMENTS.md`.
-   The Linux test suite has not been re-run since that change. Further ideas (FEC) are in `docs/ROADMAP.md`.
+   Every change runs the full Linux test suite in CI. Further ideas are in `docs/ROADMAP.md`.
 9. **Amateur use only.** No encryption, by design. Reports and messages are readable by anyone.
 10. **Carrier detect in open-squelch hiss.** The AFSK data-carrier detect briefly mistakes hiss for data about 1-2% of
     the time (about 3% in the seconds after a burst, with or without the receive prefilter), so a transmission now and
@@ -342,9 +351,12 @@ Things a reviewer may trip over, roughly in order of how likely they are to matt
     does not happen.
 11. **OFDM's sensitivity advantage is gone in simulation.** Re-measured 2026-11-03 (168 runs, 8 noise seeds per level):
     AFSK with FX.25 delivers 500-byte acknowledged messages down to 5 dB SNR, OFDM down to 7 dB. The apps' modem notes
-    still carry the old "OFDM 4-6 dB deeper" text until the next release. OFDM has not been compared with AFSK on a
-    real radio, or on a channel with echo or multipath, where it may still do better.
-12. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
+    are corrected in 0.2.3. OFDM has not been compared with AFSK on a real radio, or on a channel with echo or
+    multipath, where it may still do better. Until 0.2.3, OFDM also missed every packet received below about
+    -47 dBFS, a receiver bug found in an acoustic test and now fixed.
+12. **Listen on all modems hears, but replies on one.** Replies and acknowledgements go out on the station's selected
+    modem, so a station on another modem sees FAILED (no ACK) unless it listens on all modems too.
+13. **Planned: JS8Call bridge.** A gateway station running HamLink (VHF) and JS8Call (HF) would carry messages, SITREPs and
     SALUTE reports between the two through JS8Call's TCP API, with operator approval of HF transmissions by default.
 
 ## Licence

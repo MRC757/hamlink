@@ -55,7 +55,8 @@ GPS coordinates are blurred in these screenshots.
   and **MT63-2000, slow but robust**: about 7 times the airtime of AFSK, but in simulation it still delivered at -4 dB
   SNR, where AFSK needs about +6 dB.
 * **Reliable delivery:** acknowledgements and retries (selective-repeat ARQ), flood relay with duplicate suppression,
-  carrier sense, automatic station ID.
+  carrier sense, automatic station ID. Every frame carries the sender's callsign, so the separate ID can be switched
+  off (*Send station ID*); it is still sent after relaying or a test tone.
 * **FX.25 error correction on AFSK**, on by default: repairs damaged bytes in each frame (up to 8, 16 or 32 depending on
   the setting), while stations without FX.25 still read frames that arrive intact.
 * **Voice as store-and-forward clips** (Codec2 700C): a 5 s clip is about 500 bytes.
@@ -71,16 +72,28 @@ GPS coordinates are blurred in these screenshots.
   direction, unread counts and a link to the map. Messages are kept for 5 days.
 * **Monitor all traffic** and **Listen on all modems** (both off by default): show messages between other stations,
   and hear stations on any of the five modems. A relay re-sends each message on the modem it arrived on.
+* **Manual PTT** for radios with no interface: on-screen countdowns tell you when to key the radio and when to let go.
 * **Built-in Help** on both apps: equipment for each modem, the Stations page, offline maps, troubleshooting.
 * **Receiver tested on real packet audio:** on the WA8LMF TNC Test CD it decodes 971 error-free frames from the
   de-emphasised traffic track and 1001 from the flat one, with no false frames from an hour of noise.
 
 ## Status
-Review build 0.2.2. **The Windows app runs on Windows 11 and the Android app on a phone.** The two have exchanged
-messages, reports and relayed traffic, and **MT63** messages over **Baofeng radios**. The cable used for that radio test
-has built-in noise cancelling that only MT63 survives, so **AFSK, PSK and OFDM over radio** still need testing with a
-DigiRig or another interface without audio processing. Bug reports with the exact error text are the most useful feedback
-right now. Windows logs errors with stack traces to `%LOCALAPPDATA%\HamLink\error.log`.
+The current release is review build **0.2.2**. **Version 0.2.3 is in testing** in this repository and not released yet.
+It adds the Stations page, reports to one station, monitor and listen-on-all-modems, the station ID switch, the
+manual PTT countdown, a fix that lets OFDM decode quiet signals, and the new logo.
+
+* **Apps:** the Windows app runs on Windows 11 and the Android app on a phone. The two have exchanged messages,
+  reports and relayed traffic, and the Stations page works between them.
+* **Over Baofeng radios:**
+  * The cable used so far (BTECH APRS-K1 PRO) has built-in noise cancelling. It passes **MT63**, and **AFSK** only
+    for short messages with a 300 ms PTT lead-in.
+  * Wide band decoded with fewer errors than Narrow.
+  * **PSK and OFDM over radio** still need testing with a DigiRig or another interface without audio processing.
+* **Acoustic coupling** (phone to radio to radio to laptop microphone): MT63 and OFDM decode; AFSK and PSK do not.
+* **Automated tests:** 110 core tests and 22 Pi relay tests pass on Linux x86-64 and ARM64 for every change.
+
+Bug reports with the exact error text are the most useful feedback right now. Windows logs errors with stack traces
+to `%LOCALAPPDATA%\HamLink\error.log`.
 
 ## Download
 From the newest release on the [Releases page](https://github.com/MRC757/hamlink/releases):
@@ -89,8 +102,12 @@ From the newest release on the [Releases page](https://github.com/MRC757/hamlink
   time: choose *More info > Run anyway*.
 * **Raspberry Pi:** `install.sh` (above) fetches `libhamlink_api-linux-aarch64.so` from the release by itself. The SD
   card image, `hamlink-relay-<version>.img.xz`, is attached from the next release on.
-* **Android 8.0+:** `HamLink-<version>-android.apk`. Open it on the phone and allow *Install unknown apps*. It is a test
-  build signed with a development key, not a Play Store release.
+* **Android 8.0+:** `HamLink-<version>-android.apk`. Open it on the phone and allow *Install unknown apps*.
+  * **Signing:** up to 0.2.2 the APK was signed with a development key; from 0.2.3 it is signed with the project's
+    release key. Moving from 0.2.2 or earlier to 0.2.3 therefore needs **one uninstall and reinstall**, which clears
+    the app's settings and message history. Later updates install normally.
+  * **F-Droid:** a listing is being prepared (`hamlink/docs/FDROID.md`). F-Droid signs with its own key, so an F-Droid
+    copy and a GitHub copy cannot update each other.
 
 ## Raspberry Pi hilltop relay (preview)
 `hamlinkd` runs the same core as an unattended relay on a Raspberry Pi (Zero 2 W or later). It works with a DigiRig on
@@ -139,6 +156,8 @@ with no radio to a DigiRig on the air.
 | [hamlink/docs/PROTOCOL.md](hamlink/docs/PROTOCOL.md) | On-air format |
 | [hamlink/docs/MAPS_AND_REPORTS.md](hamlink/docs/MAPS_AND_REPORTS.md) | Positions, SALUTE, SITREP, map behaviour |
 | [hamlink/docs/OFFLINE_MAPS.md](hamlink/docs/OFFLINE_MAPS.md) | Offline map files and where to get them |
+| [hamlink/docs/STATIONS_PAGE.md](hamlink/docs/STATIONS_PAGE.md) | Stations page, monitor mode and listening on all modems: design and status |
+| [hamlink/docs/FDROID.md](hamlink/docs/FDROID.md) | Publishing on F-Droid: what is prepared, how to submit, releases |
 | [hamlink/docs/help/HELP.md](hamlink/docs/help/HELP.md) | The in-app Help: equipment, offline maps, troubleshooting |
 | [hamlink/docs/DSP_IMPROVEMENTS.md](hamlink/docs/DSP_IMPROVEMENTS.md) | Receiver design and Test CD results |
 
