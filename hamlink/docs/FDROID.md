@@ -7,11 +7,11 @@ already prepared, the steps to submit, and what each later release needs.
 
 | Item | Where |
 |---|---|
-| Build metadata for F-Droid | `hamlink/fdroid/org.hamlink.app.yml`, copied unchanged to `metadata/org.hamlink.app.yml` in F-Droid's metadata repository. It is in the canonical form `fdroid rewritemeta` produces, so it has no comments: it builds from tag `v0.2.3` in `hamlink/android/app`, pins the NDK, and deletes the unused prebuilt Windows DLL before F-Droid's scan (`scandelete`). Categories: Connectivity and Messaging, from F-Droid's current list (`config/categories.yml` in fdroiddata; "Radio" there means broadcast-radio streaming apps). |
+| Build metadata for F-Droid | `hamlink/fdroid/org.hamlink.app.yml`, copied unchanged to `metadata/org.hamlink.app.yml` in F-Droid's metadata repository. It is in the canonical form `fdroid rewritemeta` produces, so it has no comments: it builds 0.2.4 from its tag's full commit hash in `hamlink/android/app`, pins the NDK, accepts only APKs signed with the release key (`AllowedAPKSigningKeys`, with the GitHub APK as `Binaries`), and deletes the unused prebuilt Windows DLL before F-Droid's scan (`scandelete`). Categories: Connectivity and Messaging, from F-Droid's current list (`config/categories.yml` in fdroiddata; "Radio" there means broadcast-radio streaming apps). |
 | Store listing: title, short and full description | `fastlane/metadata/android/en-US/` (repository root) |
 | Icon (512 x 512) | `fastlane/metadata/android/en-US/images/icon.png`, drawn by `hamlink/tools/make_icon.py`; the app's launcher icon is the same design (`res/drawable/ic_launcher_foreground.xml`) |
 | Screenshots (GPS lines blurred) | `fastlane/metadata/android/en-US/images/phoneScreenshots/` |
-| Changelog per version | `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (7 = 0.2.3) |
+| Changelog per version | `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (7 = 0.2.3, 8 = 0.2.4) |
 | NDK version pinned | `ndkVersion = "27.0.12077973"` in `hamlink/android/app/build.gradle.kts` |
 | Prebuilt binaries | Only `hamlink/windows/native/hamlink_core.dll`, which the Android build does not use; the metadata deletes it before building (`scandelete`). The MT63 `.dat` files are C source. |
 
@@ -64,9 +64,10 @@ way (for example on Windows): F-Droid's build would not match it, and that versi
 1. **Fork fdroiddata.** In https://gitlab.com/fdroid/fdroiddata, fork with your own namespace, **Public**, default
    branch only (done: gitlab.com/mrc757/fdroiddata).
 2. **Add the metadata.** Put `hamlink/fdroid/org.hamlink.app.yml` at `metadata/org.hamlink.app.yml` on a new branch
-   (`org.hamlink.app`). The `commit` field must be the **full hash** of the release tag's commit.
+   (`org.hamlink.app`). The `commit` field must be the **full hash** of the release tag's commit. (Done for 0.2.4.)
 3. **Check it.** Run `fdroid lint org.hamlink.app` and `fdroid rewritemeta org.hamlink.app` in the fdroiddata
-   checkout: lint reports nothing, and rewritemeta changes nothing.
+   checkout: lint reports nothing, and rewritemeta changes nothing (on Windows it rewrites the line endings to CRLF;
+   keep the LF file). (Done.)
 4. **Open the merge request.** Title it "New app: HamLink" and use the default (app inclusion) template. Reviewers
    often ask for small changes, and acceptance usually takes a few weeks. After merging, the app appears at the next
    index update (a day or two).
