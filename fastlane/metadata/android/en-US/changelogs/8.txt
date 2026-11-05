@@ -1,0 +1,3 @@
+0.2.4
+- Reproducible build: the APK published on GitHub and on F-Droid is the same, signed with the HamLink release key, so either copy can update the other
+- No other changes from 0.2.3

@@ -106,8 +106,9 @@ From the newest release on the [Releases page](https://github.com/MRC757/hamlink
   * **Signing:** up to 0.2.2 the APK was signed with a development key; from 0.2.3 it is signed with the project's
     release key. Moving from 0.2.2 or earlier to 0.2.3 therefore needs **one uninstall and reinstall**, which clears
     the app's settings and message history. Later updates install normally.
-  * **F-Droid:** a listing is being prepared (`hamlink/docs/FDROID.md`). F-Droid signs with its own key, so an F-Droid
-    copy and a GitHub copy cannot update each other.
+  * **F-Droid:** a listing is being prepared (`hamlink/docs/FDROID.md`). From 0.2.4 the Android build is
+    reproducible, so F-Droid will publish the same APK, signed with the HamLink release key, and a GitHub copy and an
+    F-Droid copy can update each other.
 
 ## Raspberry Pi hilltop relay (preview)
 `hamlinkd` runs the same core as an unattended relay on a Raspberry Pi (Zero 2 W or later). It works with a DigiRig on

@@ -24,51 +24,54 @@ Checked against the [Inclusion Policy](https://f-droid.org/docs/Inclusion_Policy
 * **Release signing:** without the project key (`%USERPROFILE%/.hamlink-release/`), release builds are unsigned, which
   is what F-Droid's build server wants.
 
-## Steps
+## Reproducible builds
 
-1. **Release 0.2.3** as usual. The release commit must contain everything above, with `versionCode 7` and
-   `versionName "0.2.3"`. Then push a tag:
+F-Droid publishes **the project's own signed APK**: it rebuilds HamLink from the release tag, copies the signature
+from the APK on GitHub onto its build, and publishes the result if it verifies. So the GitHub APK must be exactly what
+anyone gets by building that tag. Users can then move between the GitHub and F-Droid copies.
+
+What makes the build reproducible:
+* **Native code** (`android/app/src/main/cpp/CMakeLists.txt`): build paths mapped to fixed names
+  (`-ffile-prefix-map`), and no build-id note.
+* **Gradle** (`android/app/build.gradle.kts`): no dependency-info block, no version-control info file, no baseline
+  profiles.
+* **Release APK built in CI**: `.github/workflows/android-release.yml` builds the unsigned APK twice, from checkouts in
+  two different directories, and fails unless they are byte-identical. It runs on every `v*` tag.
+* **Signing** (`tools/sign_release_apk.sh`, on the maintainer's PC; the key never goes to GitHub): v2 + v3 only, with
+  the zip alignment preserved, so the signed APK is the unsigned one plus apksigner's padding and signing block.
+
+## Each release
+
+1. **Bump the version.** Raise `versionCode` and `versionName` in `android/app/build.gradle.kts`, and `<Version>` in
+   `windows/HamLink.csproj`.
+2. **Changelog.** Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (500 characters at most).
+3. **Tag.** Commit, then tag and push it: `git tag -a vX.Y.Z -m "HamLink X.Y.Z" && git push origin vX.Y.Z`.
+4. **Sign the CI build.** Wait for the `android-release` run on the tag to pass (the reproducibility check), then
+   download and sign its APK:
    ```
-   git tag -a v0.2.3 -m "HamLink 0.2.3"
-   git push origin v0.2.3
+   gh run download <run-id> -n hamlink-android-unsigned
+   hamlink/tools/sign_release_apk.sh app-release-unsigned.apk HamLink-X.Y.Z-android.apk
    ```
-   F-Droid builds from the tag (`commit: v0.2.3`) and finds later versions from new `v*` tags.
+5. **Publish.** Create the GitHub release with that APK and the Windows zip. The APK must be named
+   `HamLink-X.Y.Z-android.apk`: F-Droid's metadata downloads it from
+   `https://github.com/MRC757/hamlink/releases/download/vX.Y.Z/HamLink-X.Y.Z-android.apk`.
 
-2. **Test the build F-Droid's way** (optional but saves a review round). On Linux, or WSL on Windows, with Docker:
-   ```
-   git clone https://gitlab.com/fdroid/fdroiddata && cd fdroiddata
-   cp /path/to/hamlink/fdroid/org.hamlink.app.yml metadata/
-   docker run --rm -v "$PWD":/repo registry.gitlab.com/fdroid/fdroidserver:buildserver \
-       build --verbose --test --latest org.hamlink.app
-   docker run --rm -v "$PWD":/repo registry.gitlab.com/fdroid/fdroidserver:buildserver lint org.hamlink.app
-   ```
-   `build` must finish with an unsigned APK; `lint` must report nothing.
+**F-Droid picks up new tags by itself**, so nothing needs changing in fdroiddata. Do not attach an APK built any other
+way (for example on Windows): F-Droid's build would not match it, and that version would not be published.
 
-3. **Submit:**
-   1. Make an account on gitlab.com.
-   2. Fork https://gitlab.com/fdroid/fdroiddata.
-   3. Create a branch, add `metadata/org.hamlink.app.yml`, commit, push, and open a merge request.
-   4. Use the "App inclusion" template and tick its checklist.
+## First submission
 
-   Reviewers often ask for small changes, and acceptance usually takes a few weeks. After merging, the app appears
-   at the next index update (a day or two).
+1. **Fork fdroiddata.** In https://gitlab.com/fdroid/fdroiddata, fork with your own namespace, **Public**, default
+   branch only (done: gitlab.com/mrc757/fdroiddata).
+2. **Add the metadata.** Put `hamlink/fdroid/org.hamlink.app.yml` at `metadata/org.hamlink.app.yml` on a new branch
+   (`org.hamlink.app`). The `commit` field must be the **full hash** of the release tag's commit.
+3. **Check it.** Run `fdroid lint org.hamlink.app` and `fdroid rewritemeta org.hamlink.app` in the fdroiddata
+   checkout: lint reports nothing, and rewritemeta changes nothing.
+4. **Open the merge request.** Title it "New app: HamLink" and use the default (app inclusion) template. Reviewers
+   often ask for small changes, and acceptance usually takes a few weeks. After merging, the app appears at the next
+   index update (a day or two).
 
-## Each later release
-
-1. Raise `versionCode` and `versionName` in `hamlink/android/app/build.gradle.kts`.
-2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (500 characters at most).
-3. Tag `vX.Y.Z` and push the tag.
-
-F-Droid's update checker (`UpdateCheckMode: Tags`) finds the tag and builds the new version by itself; nothing needs
-changing in fdroiddata.
-
-## Signing: F-Droid copies and GitHub copies are separate
-
-F-Droid signs with its own key. A phone with the GitHub APK (signed with the HamLink release key) cannot update to the
-F-Droid build or back; switching means uninstalling, which loses settings and message history. Tell users to pick
-one source.
-
-To publish the project's own signed APK through F-Droid instead, the build has to be **reproducible**: F-Droid
-rebuilds it, checks that it matches the GitHub APK byte for byte, then ships the GitHub one. That is a later
-improvement. Native code needs care to build reproducibly; see
-https://f-droid.org/docs/Reproducible_Builds/.
+## Signing history
+0.2.2 and earlier: development (debug) key. 0.2.3: HamLink release key (APK built on Windows, not reproducible).
+0.2.4 onward: HamLink release key, reproducible. Release key certificate SHA-256:
+`58435591f0999a47f867baf7c176246248d42ea298c7770264eb7be42534586d`.
