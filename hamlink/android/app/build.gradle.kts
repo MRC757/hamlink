@@ -15,8 +15,8 @@ android {
         applicationId = "org.hamlink.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.2.3"
+        versionCode = 8
+        versionName = "0.2.4"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         externalNativeBuild { cmake { arguments += listOf("-DANDROID_STL=c++_static") } }
     }
@@ -43,9 +43,17 @@ android {
         }
     }
 
+    // Reproducible builds (F-Droid rebuilds the release APK and compares it with ours): no Google-encrypted dependency
+    // report in the APK, and no version-control info file.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            vcsInfo.include = false
             if (releaseKey != null) signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -57,6 +65,11 @@ android {
     buildFeatures { compose = true }
     // Help text (HELP.md), shared with the Windows app, which embeds the same file.
     sourceSets["main"].assets.srcDir("../../docs/help")
+}
+
+// Baseline profiles (assets/dexopt/baseline.prof*) are not always byte-identical between builds: leave them out.
+tasks.whenTaskAdded {
+    if (name.contains("ArtProfile")) enabled = false
 }
 
 dependencies {

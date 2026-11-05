@@ -1,0 +1,68 @@
+# Reproducible Android release build: the APK that is published on GitHub and that F-Droid compares against.
+#
+# Builds the UNSIGNED release APK twice, from checkouts in two different directories, and fails unless the two are
+# byte-identical (F-Droid rebuilds HamLink in its own paths and must get the same bytes). The unsigned APK is kept as an
+# artifact; it is signed on the maintainer's PC with the release key (which never comes to GitHub):
+#     apksigner sign --ks hamlink-release.jks --out HamLink-X.Y.Z-android.apk app-release-unsigned.apk
+# and the signed APK is attached to the release. See hamlink/docs/FDROID.md.
+name: android-release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths: ["hamlink/android/**", "hamlink/core/**", "hamlink/third_party/**", ".github/workflows/android-release.yml"]
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: first
+          persist-credentials: false
+
+      - name: Second checkout in another directory (as F-Droid's build server would use)
+        run: cp -a first "$RUNNER_TEMP/elsewhere-build-path"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK packages (the versions in app/build.gradle.kts)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+              "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.22.1" >/dev/null
+          echo "sdk.dir=$ANDROID_HOME" > first/hamlink/android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" > "$RUNNER_TEMP/elsewhere-build-path/hamlink/android/local.properties"
+
+      - name: Build twice
+        run: |
+          for d in "$GITHUB_WORKSPACE/first" "$RUNNER_TEMP/elsewhere-build-path"; do
+            (cd "$d/hamlink/android" && ./gradlew --no-daemon -q assembleRelease)
+          done
+          ls -l first/hamlink/android/app/build/outputs/apk/release/
+
+      - name: Compare the two builds
+        run: |
+          a=first/hamlink/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          b="$RUNNER_TEMP/elsewhere-build-path/hamlink/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          sha256sum "$a" "$b"
+          if cmp -s "$a" "$b"; then
+            echo "### Reproducible: the two unsigned APKs are byte-identical" >> "$GITHUB_STEP_SUMMARY"
+            sha256sum "$a" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "NOT reproducible. Files that differ:"
+            mkdir -p ua ub && unzip -q -o "$a" -d ua && unzip -q -o "$b" -d ub
+            diff -rq ua ub || true
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hamlink-android-unsigned
+          path: first/hamlink/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          compression-level: 0

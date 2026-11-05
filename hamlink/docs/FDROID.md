@@ -7,7 +7,7 @@ already prepared, the steps to submit, and what each later release needs.
 
 | Item | Where |
 |---|---|
-| Build metadata for F-Droid | `hamlink/fdroid/org.hamlink.app.yml` (copied into F-Droid's metadata repository) |
+| Build metadata for F-Droid | `hamlink/fdroid/org.hamlink.app.yml`, copied unchanged to `metadata/org.hamlink.app.yml` in F-Droid's metadata repository. It is in the canonical form `fdroid rewritemeta` produces, so it has no comments: it builds from tag `v0.2.3` in `hamlink/android/app`, pins the NDK, and deletes the unused prebuilt Windows DLL before F-Droid's scan (`scandelete`). Categories: Connectivity and Messaging, from F-Droid's current list (`config/categories.yml` in fdroiddata; "Radio" there means broadcast-radio streaming apps). |
 | Store listing: title, short and full description | `fastlane/metadata/android/en-US/` (repository root) |
 | Icon (512 x 512) | `fastlane/metadata/android/en-US/images/icon.png`, drawn by `hamlink/tools/make_icon.py`; the app's launcher icon is the same design (`res/drawable/ic_launcher_foreground.xml`) |
 | Screenshots (GPS lines blurred) | `fastlane/metadata/android/en-US/images/phoneScreenshots/` |
