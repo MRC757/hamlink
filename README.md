@@ -1,3 +1,5 @@
+<img src="hamlink/docs/logo.png" alt="HamLink logo: a lattice radio tower topped by a triangle with an eye" width="96" align="right">
+
 # HamLink
 
 Text messages, voice clips, position reports and SALUTE situation reports over cheap handheld VHF/UHF FM radios
