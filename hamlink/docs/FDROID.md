@@ -72,6 +72,15 @@ way (for example on Windows): F-Droid's build would not match it, and that versi
    often ask for small changes, and acceptance usually takes a few weeks. After merging, the app appears at the next
    index update (a day or two).
 
+## Submission status
+* **2026-11-05:** merge request [!55912](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/55912) opened. Every
+  pipeline check passed, including the reproducible-build comparison against the signed GitHub APK. A maintainer closed
+  it under Inclusion Policy *Quality point 6*: an app must have been developed in public for **at least 3 months**
+  (this repository starts on 2026-11-01), unless it has proven users or the author maintains other F-Droid apps.
+* **Resubmit on or after 2027-02-01:** update the metadata to the latest release on branch `org.hamlink.app` of
+  gitlab.com/mrc757/fdroiddata, then reopen !55912 (or open a new merge request) with a short note on the development
+  and radio testing since November.
+
 ## Signing history
 0.2.2 and earlier: development (debug) key. 0.2.3: HamLink release key (APK built on Windows, not reproducible).
 0.2.4 onward: HamLink release key, reproducible. Release key certificate SHA-256:
